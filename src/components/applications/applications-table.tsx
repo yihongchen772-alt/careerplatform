@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { Send } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -121,8 +122,11 @@ export function ApplicationsTable({
           })}
           {filtered.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
-                暂无投递记录
+              <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                <div className="flex flex-col items-center gap-2">
+                  <Send className="size-8 text-muted-foreground/50" />
+                  <span>暂无投递记录</span>
+                </div>
               </TableCell>
             </TableRow>
           )}

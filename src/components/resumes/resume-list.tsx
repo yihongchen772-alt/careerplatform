@@ -1,8 +1,10 @@
 "use client";
 
 import { toast } from "sonner";
+import { FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { deleteResumeVersion } from "@/lib/actions/resumes";
 
 export type ResumeVersionRow = {
@@ -15,7 +17,6 @@ export type ResumeVersionRow = {
 
 export function ResumeList({ resumes }: { resumes: ResumeVersionRow[] }) {
   async function handleDelete(id: string) {
-    if (!confirm("确定删除该简历版本吗？")) return;
     try {
       await deleteResumeVersion(id);
       toast.success("已删除");
@@ -26,9 +27,10 @@ export function ResumeList({ resumes }: { resumes: ResumeVersionRow[] }) {
 
   if (resumes.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        还没有简历版本，先添加一个吧
-      </p>
+      <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-12 text-center text-muted-foreground">
+        <FileText className="size-8 text-muted-foreground/50" />
+        <span className="text-sm">还没有简历版本，先添加一个吧</span>
+      </div>
     );
   }
 
@@ -55,9 +57,15 @@ export function ResumeList({ resumes }: { resumes: ResumeVersionRow[] }) {
                 </a>
               )}
             </div>
-            <Button size="sm" variant="ghost" onClick={() => handleDelete(r.id)}>
-              删除
-            </Button>
+            <ConfirmDeleteButton
+              trigger={
+                <Button size="sm" variant="ghost">
+                  删除
+                </Button>
+              }
+              title={`确定删除简历版本「${r.name}」吗？`}
+              onConfirm={() => handleDelete(r.id)}
+            />
           </CardContent>
         </Card>
       ))}

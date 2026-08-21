@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ListChecks } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -13,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MarkAppliedDialog } from "@/components/pool/mark-applied-dialog";
+import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { deletePosition } from "@/lib/actions/positions";
 import { POSITION_STATUS_LABELS } from "@/lib/stage-labels";
 import { daysUntil } from "@/lib/reminders";
@@ -51,7 +53,6 @@ export function PoolTable({
   const marking = sorted.find((p) => p.id === markingId);
 
   async function handleDelete(id: string) {
-    if (!confirm("确定删除该候选岗位吗？")) return;
     try {
       await deletePosition(id);
       toast.success("已删除");
@@ -129,21 +130,26 @@ export function PoolTable({
                       标记已投
                     </Button>
                   )}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDelete(p.id)}
-                  >
-                    删除
-                  </Button>
+                  <ConfirmDeleteButton
+                    trigger={
+                      <Button size="sm" variant="ghost">
+                        删除
+                      </Button>
+                    }
+                    title={`确定删除 ${p.company.name} · ${p.title} 吗？`}
+                    onConfirm={() => handleDelete(p.id)}
+                  />
                 </TableCell>
               </TableRow>
             );
           })}
           {sorted.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8} className="text-center text-muted-foreground">
-                候选池为空，先添加一个感兴趣的岗位吧
+              <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                <div className="flex flex-col items-center gap-2">
+                  <ListChecks className="size-8 text-muted-foreground/50" />
+                  <span>候选池为空，先添加一个感兴趣的岗位吧</span>
+                </div>
               </TableCell>
             </TableRow>
           )}

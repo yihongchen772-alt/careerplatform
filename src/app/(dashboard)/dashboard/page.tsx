@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Clock, Send, Trophy, XCircle, type LucideIcon } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,29 +44,29 @@ export default async function DashboardPage() {
       <h1 className="text-2xl font-semibold">总览</h1>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <StatCard label="总投递数" value={total} />
-        <StatCard label="进行中" value={inProgress} />
-        <StatCard label="Offer" value={offers} />
-        <StatCard label="已结束（拒/拒绝）" value={rejected} />
+        <StatCard label="总投递数" value={total} icon={Send} />
+        <StatCard label="进行中" value={inProgress} icon={Clock} />
+        <StatCard label="Offer" value={offers} icon={Trophy} accent />
+        <StatCard label="已结束" value={rejected} icon={XCircle} muted />
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>漏斗分布</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-2.5">
           {stageCounts.map(({ stage, count }) => (
             <div key={stage} className="flex items-center gap-3 text-sm">
               <span className="w-24 shrink-0 text-muted-foreground">
                 {STAGE_LABELS[stage]}
               </span>
-              <div className="h-4 flex-1 rounded bg-muted">
+              <div className="h-5 flex-1 rounded-sm bg-muted">
                 <div
-                  className="h-4 rounded bg-primary"
+                  className="h-5 rounded-r-sm bg-primary transition-all"
                   style={{ width: `${(count / maxCount) * 100}%` }}
                 />
               </div>
-              <span className="w-6 text-right">{count}</span>
+              <span className="w-6 text-right font-medium">{count}</span>
             </div>
           ))}
         </CardContent>
@@ -122,12 +123,38 @@ export default async function DashboardPage() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  accent,
+  muted,
+}: {
+  label: string;
+  value: number;
+  icon: LucideIcon;
+  accent?: boolean;
+  muted?: boolean;
+}) {
   return (
     <Card>
-      <CardContent className="pt-6">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-3xl font-semibold">{value}</p>
+      <CardContent className="flex items-start justify-between pt-6">
+        <div>
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-3xl font-semibold">{value}</p>
+        </div>
+        <div
+          className={
+            "flex size-9 shrink-0 items-center justify-center rounded-md " +
+            (accent
+              ? "bg-primary/10 text-primary"
+              : muted
+                ? "bg-muted text-muted-foreground/70"
+                : "bg-muted text-muted-foreground")
+          }
+        >
+          <Icon className="size-5" />
+        </div>
       </CardContent>
     </Card>
   );

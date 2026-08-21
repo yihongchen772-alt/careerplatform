@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Scale } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,9 +34,12 @@ export default async function ComparePage() {
       </div>
 
       {applications.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          还没有拿到 offer 的投递记录，等你收到第一个 offer 就会出现在这里
-        </p>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-16 text-center text-muted-foreground">
+          <Scale className="size-8 text-muted-foreground/50" />
+          <span className="text-sm">
+            还没有拿到 offer 的投递记录，等你收到第一个 offer 就会出现在这里
+          </span>
+        </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {applications.map((app) => {
