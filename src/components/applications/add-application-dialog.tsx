@@ -14,6 +14,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { createApplication } from "@/lib/actions/applications";
+import {
+  LAST_REFERRER_KEY,
+  LAST_SOURCE_KEY,
+  rememberValue,
+  recallValue,
+} from "@/lib/remembered-values";
 
 export function AddApplicationDialog() {
   const [open, setOpen] = useState(false);
@@ -23,8 +29,8 @@ export function AddApplicationDialog() {
   const [appliedDate, setAppliedDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
-  const [referrer, setReferrer] = useState("");
-  const [source, setSource] = useState("");
+  const [referrer, setReferrer] = useState(() => recallValue(LAST_REFERRER_KEY));
+  const [source, setSource] = useState(() => recallValue(LAST_SOURCE_KEY));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,11 +47,11 @@ export function AddApplicationDialog() {
         referrer: referrer || undefined,
         source: source || undefined,
       });
+      rememberValue(LAST_REFERRER_KEY, referrer);
+      rememberValue(LAST_SOURCE_KEY, source);
       toast.success("已新增投递记录");
       setCompanyName("");
       setTitle("");
-      setReferrer("");
-      setSource("");
       setOpen(false);
     } catch {
       toast.error("新增失败，请重试");

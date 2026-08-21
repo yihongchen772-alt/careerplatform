@@ -29,3 +29,25 @@ export async function deleteResumeVersion(id: string) {
   await db.resumeVersion.deleteMany({ where: { id, userId: user.id } });
   revalidatePath("/resumes");
 }
+
+export async function setDefaultResumeVersion(id: string) {
+  const user = await requireUser();
+  const target = await db.resumeVersion.findFirst({
+    where: { id, userId: user.id },
+  });
+  if (!target) throw new Error("未找到该简历版本");
+
+  await db.$transaction([
+    db.resumeVersion.updateMany({
+      where: { userId: user.id, isDefault: true },
+      data: { isDefault: false },
+    }),
+    db.resumeVersion.update({
+      where: { id },
+      data: { isDefault: true },
+    }),
+  ]);
+
+  revalidatePath("/resumes");
+  revalidatePath("/pool");
+}

@@ -13,7 +13,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { createPosition } from "@/lib/actions/positions";
+import { parseJd } from "@/lib/actions/jd-parse";
 
 const emptyForm = {
   companyName: "",
@@ -34,10 +36,46 @@ const emptyForm = {
 export function AddPositionDialog() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [parsing, setParsing] = useState(false);
+  const [jdText, setJdText] = useState("");
+  const [scoreReason, setScoreReason] = useState("");
   const [form, setForm] = useState(emptyForm);
 
   function set<K extends keyof typeof emptyForm>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function handleParse() {
+    if (!jdText.trim() && !form.jdUrl.trim()) {
+      toast.error("先粘贴 JD 文字，或填写链接");
+      return;
+    }
+    setParsing(true);
+    try {
+      const parsed = await parseJd({ text: jdText, url: form.jdUrl });
+      // Replace rather than merge: this button means "fill from THIS jd", so a
+      // field the model couldn't find must clear, not silently keep a value
+      // left over from a previous parse in the same dialog.
+      setForm((f) => ({
+        ...f,
+        companyName: parsed.companyName ?? "",
+        title: parsed.title ?? "",
+        location: parsed.location ?? "",
+        track: parsed.track ?? "",
+        salaryMin: parsed.salaryMin != null ? String(parsed.salaryMin) : "",
+        salaryMax: parsed.salaryMax != null ? String(parsed.salaryMax) : "",
+        techFit: String(Math.round(parsed.techFit)),
+        salary: String(Math.round(parsed.salaryScore)),
+        location_score: String(Math.round(parsed.locationScore)),
+        growth: String(Math.round(parsed.growthScore)),
+      }));
+      setScoreReason(parsed.scoreReason);
+      toast.success("已自动填充并打分，请检查一下再保存");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "解析失败，请手动填写");
+    } finally {
+      setParsing(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -67,6 +105,8 @@ export function AddPositionDialog() {
       });
       toast.success("已添加到候选池");
       setForm(emptyForm);
+      setJdText("");
+      setScoreReason("");
       setOpen(false);
     } catch {
       toast.error("添加失败，请重试");
@@ -83,6 +123,37 @@ export function AddPositionDialog() {
           <DialogTitle>添加候选岗位</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+            <Field label="粘贴 JD 文字（推荐）">
+              <Textarea
+                value={jdText}
+                onChange={(e) => setJdText(e.target.value)}
+                rows={3}
+                placeholder="在招聘页面上复制岗位描述，粘贴到这里"
+              />
+            </Field>
+            <Field label="或填 JD 链接">
+              <Input
+                value={form.jdUrl}
+                onChange={(e) => set("jdUrl", e.target.value)}
+                placeholder="https://..."
+              />
+            </Field>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={parsing}
+                onClick={handleParse}
+              >
+                {parsing ? "解析中..." : "AI 自动填充"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                很多招聘网站禁止抓取，链接解析不一定成功，粘文字最稳
+              </p>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="公司名称 *">
               <Input
@@ -140,15 +211,14 @@ export function AddPositionDialog() {
               />
             </Field>
           </div>
-          <Field label="JD 链接">
-            <Input
-              value={form.jdUrl}
-              onChange={(e) => set("jdUrl", e.target.value)}
-            />
-          </Field>
 
           <div className="space-y-2">
             <p className="text-sm font-medium">打分（0-10，权重：技术35% 薪资25% 地点20% 成长20%）</p>
+            {scoreReason && (
+              <p className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
+                AI 打分依据：{scoreReason}
+              </p>
+            )}
             <div className="grid grid-cols-4 gap-2">
               <Field label="技术栈匹配">
                 <Input

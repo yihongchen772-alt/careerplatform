@@ -140,3 +140,49 @@ export async function markPositionApplied(
   revalidatePath("/applications");
   revalidatePath("/dashboard");
 }
+
+export async function markPositionsApplied(
+  ids: string[],
+  input: { appliedDate: Date; referrer?: string; resumeVersionId?: string }
+) {
+  const user = await requireUser();
+  const positions = await db.position.findMany({
+    where: { id: { in: ids }, userId: user.id },
+  });
+
+  await db.$transaction(async (tx) => {
+    for (const position of positions) {
+      const application = await tx.application.create({
+        data: {
+          userId: user.id,
+          positionId: position.id,
+          companyId: position.companyId,
+          title: position.title,
+          appliedDate: input.appliedDate,
+          referrer: input.referrer,
+          source: position.source,
+          resumeVersionId: input.resumeVersionId,
+          currentStage: "APPLIED",
+          salaryMin: position.salaryMin,
+          salaryMax: position.salaryMax,
+        },
+      });
+
+      await tx.stageHistory.create({
+        data: {
+          applicationId: application.id,
+          stage: "APPLIED",
+        },
+      });
+
+      await tx.position.update({
+        where: { id: position.id },
+        data: { status: "APPLIED" },
+      });
+    }
+  });
+
+  revalidatePath("/pool");
+  revalidatePath("/applications");
+  revalidatePath("/dashboard");
+}

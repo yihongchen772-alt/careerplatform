@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { MarkAppliedDialog } from "@/components/pool/mark-applied-dialog";
 import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { deletePosition } from "@/lib/actions/positions";
@@ -38,11 +39,16 @@ type ResumeOption = { id: string; name: string };
 export function PoolTable({
   positions,
   resumeVersions,
+  defaultResumeVersionId,
 }: {
   positions: PoolPosition[];
   resumeVersions: ResumeOption[];
+  defaultResumeVersionId?: string | null;
 }) {
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [batchMarking, setBatchMarking] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
   const sorted = useMemo(
     () =>
       [...positions].sort(
@@ -50,7 +56,22 @@ export function PoolTable({
       ),
     [positions]
   );
+  const markable = sorted.filter((p) => p.status !== "APPLIED");
   const marking = sorted.find((p) => p.id === markingId);
+  const selectedPositions = sorted.filter((p) => selected.has(p.id));
+
+  function toggleSelected(id: string, checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(checked: boolean) {
+    setSelected(checked ? new Set(markable.map((p) => p.id)) : new Set());
+  }
 
   async function handleDelete(id: string) {
     try {
@@ -63,9 +84,31 @@ export function PoolTable({
 
   return (
     <>
+      {selected.size > 0 && (
+        <div className="mb-3 flex items-center justify-between rounded-md border bg-muted/50 px-3 py-2 text-sm">
+          <span>已选 {selected.size} 项</span>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => setBatchMarking(true)}>
+              批量标记已投
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              取消选择
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-8">
+              <Checkbox
+                checked={markable.length > 0 && selected.size === markable.length}
+                onCheckedChange={(checked) => toggleSelectAll(checked === true)}
+                disabled={markable.length === 0}
+                aria-label="全选"
+              />
+            </TableHead>
             <TableHead>公司 / 岗位</TableHead>
             <TableHead>方向</TableHead>
             <TableHead>地点</TableHead>
@@ -82,6 +125,17 @@ export function PoolTable({
             const daysLeft = deadline ? daysUntil(deadline) : null;
             return (
               <TableRow key={p.id}>
+                <TableCell>
+                  {p.status !== "APPLIED" && (
+                    <Checkbox
+                      checked={selected.has(p.id)}
+                      onCheckedChange={(checked) =>
+                        toggleSelected(p.id, checked === true)
+                      }
+                      aria-label={`选择 ${p.title}`}
+                    />
+                  )}
+                </TableCell>
                 <TableCell>
                   <div className="font-medium">{p.company.name}</div>
                   <div className="text-sm text-muted-foreground">{p.title}</div>
@@ -145,7 +199,7 @@ export function PoolTable({
           })}
           {sorted.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+              <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
                 <div className="flex flex-col items-center gap-2">
                   <ListChecks className="size-8 text-muted-foreground/50" />
                   <span>候选池为空，先添加一个感兴趣的岗位吧</span>
@@ -158,11 +212,28 @@ export function PoolTable({
 
       {marking && (
         <MarkAppliedDialog
-          positionId={marking.id}
-          positionLabel={`${marking.company.name} · ${marking.title}`}
+          positionIds={[marking.id]}
+          positionLabels={[`${marking.company.name} · ${marking.title}`]}
           resumeVersions={resumeVersions}
+          defaultResumeVersionId={defaultResumeVersionId}
           open={!!markingId}
           onOpenChange={(open) => !open && setMarkingId(null)}
+        />
+      )}
+
+      {batchMarking && selectedPositions.length > 0 && (
+        <MarkAppliedDialog
+          positionIds={selectedPositions.map((p) => p.id)}
+          positionLabels={selectedPositions.map(
+            (p) => `${p.company.name} · ${p.title}`
+          )}
+          resumeVersions={resumeVersions}
+          defaultResumeVersionId={defaultResumeVersionId}
+          open={batchMarking}
+          onOpenChange={(open) => {
+            setBatchMarking(open);
+            if (!open) setSelected(new Set());
+          }}
         />
       )}
     </>

@@ -17,6 +17,9 @@ export default async function SettingsPage() {
             school: user.school,
             targetTrack: user.targetTrack,
             graduationYear: user.graduationYear,
+            skills: user.skills,
+            preferredCities: user.preferredCities,
+            expectedSalaryMin: user.expectedSalaryMin,
           }}
         />
         <ChangePasswordForm />

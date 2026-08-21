@@ -25,10 +25,14 @@ export async function updateProfile(input: z.infer<typeof updateProfileSchema>) 
       school: data.school,
       targetTrack: data.targetTrack,
       graduationYear: data.graduationYear,
+      skills: data.skills,
+      preferredCities: data.preferredCities,
+      expectedSalaryMin: data.expectedSalaryMin,
     },
   });
 
   revalidatePath("/settings");
+  revalidatePath("/pool");
 }
 
 export async function changePassword(

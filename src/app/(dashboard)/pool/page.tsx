@@ -15,9 +15,12 @@ export default async function PoolPage() {
     }),
     db.resumeVersion.findMany({
       where: { userId: user.id },
-      select: { id: true, name: true },
+      select: { id: true, name: true, isDefault: true },
     }),
   ]);
+
+  const defaultResumeVersionId =
+    resumeVersions.find((r) => r.isDefault)?.id ?? null;
 
   return (
     <div className="space-y-6">
@@ -34,6 +37,7 @@ export default async function PoolPage() {
               deadline: p.deadline?.toISOString() ?? null,
             }))}
             resumeVersions={resumeVersions}
+            defaultResumeVersionId={defaultResumeVersionId}
           />
         </CardContent>
       </Card>

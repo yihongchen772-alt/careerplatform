@@ -14,6 +14,9 @@ export const updateProfileSchema = z.object({
   school: z.string().optional(),
   targetTrack: z.string().optional(),
   graduationYear: z.coerce.number().int().optional(),
+  skills: z.string().optional(),
+  preferredCities: z.string().optional(),
+  expectedSalaryMin: z.coerce.number().int().optional(),
 });
 
 export const changePasswordSchema = z.object({

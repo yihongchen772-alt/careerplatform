@@ -19,20 +19,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { markPositionApplied } from "@/lib/actions/positions";
+import { markPositionsApplied } from "@/lib/actions/positions";
+import { LAST_REFERRER_KEY, rememberValue, recallValue } from "@/lib/remembered-values";
 
 type ResumeOption = { id: string; name: string };
 
 export function MarkAppliedDialog({
-  positionId,
-  positionLabel,
+  positionIds,
+  positionLabels,
   resumeVersions,
+  defaultResumeVersionId,
   open,
   onOpenChange,
 }: {
-  positionId: string;
-  positionLabel: string;
+  positionIds: string[];
+  positionLabels: string[];
   resumeVersions: ResumeOption[];
+  defaultResumeVersionId?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -40,19 +43,26 @@ export function MarkAppliedDialog({
   const [appliedDate, setAppliedDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
-  const [referrer, setReferrer] = useState("");
-  const [resumeVersionId, setResumeVersionId] = useState<string>("");
+  const [referrer, setReferrer] = useState(() => recallValue(LAST_REFERRER_KEY));
+  const [resumeVersionId, setResumeVersionId] = useState<string>(
+    defaultResumeVersionId ?? ""
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
-      await markPositionApplied(positionId, {
+      await markPositionsApplied(positionIds, {
         appliedDate: new Date(appliedDate),
         referrer: referrer || undefined,
         resumeVersionId: resumeVersionId || undefined,
       });
-      toast.success("已标记为投递，投递记录已生成");
+      rememberValue(LAST_REFERRER_KEY, referrer);
+      toast.success(
+        positionIds.length > 1
+          ? `已标记 ${positionIds.length} 项为投递，投递记录已生成`
+          : "已标记为投递，投递记录已生成"
+      );
       onOpenChange(false);
     } catch {
       toast.error("操作失败，请重试");
@@ -65,9 +75,17 @@ export function MarkAppliedDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>标记为已投递</DialogTitle>
+          <DialogTitle>
+            {positionIds.length > 1
+              ? `批量标记为已投递（${positionIds.length} 项）`
+              : "标记为已投递"}
+          </DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">{positionLabel}</p>
+        <div className="max-h-24 space-y-1 overflow-y-auto text-sm text-muted-foreground">
+          {positionLabels.map((label, i) => (
+            <p key={i}>{label}</p>
+          ))}
+        </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">投递日期</Label>
