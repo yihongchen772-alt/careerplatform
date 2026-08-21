@@ -1,20 +1,24 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   Building2,
+  CalendarDays,
   FileText,
   LayoutDashboard,
   ListChecks,
   Scale,
+  Search,
   Send,
   Settings,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { GlobalSearchDialog } from "@/components/search/global-search-dialog";
 
 type NavLink = { href: string; label: string; icon: LucideIcon };
 
@@ -26,6 +30,7 @@ const groups: { label: string; links: NavLink[] }[] = [
     links: [
       { href: "/pool", label: "候选岗位池", icon: ListChecks },
       { href: "/applications", label: "投递记录", icon: Send },
+      { href: "/calendar", label: "日历视图", icon: CalendarDays },
       { href: "/compare", label: "Offer 对比", icon: Scale },
     ],
   },
@@ -63,6 +68,7 @@ function NavItem({ link, active }: { link: NavLink; active: boolean }) {
 export function DashboardNav({ userLabel }: { userLabel: string }) {
   const pathname = usePathname();
   const isActive = (href: string) => pathname.startsWith(href);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   return (
     <div className="flex h-full flex-col justify-between p-4">
@@ -73,6 +79,19 @@ export function DashboardNav({ userLabel }: { userLabel: string }) {
           </span>
           秋招追踪
         </div>
+
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          className="flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Search className="size-4 shrink-0" />
+          搜索...
+          <span className="ml-auto text-xs text-muted-foreground/70">
+            ⌘/Ctrl K
+          </span>
+        </button>
+        <GlobalSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
 
         <nav className="space-y-1">
           <NavItem link={overview} active={isActive(overview.href)} />

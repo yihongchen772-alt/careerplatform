@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Send } from "lucide-react";
+import { Download, Send } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { STAGE_BADGE_VARIANT, STAGE_LABELS } from "@/lib/stage-labels";
 import { daysSince, isTerminalStage } from "@/lib/reminders";
+import { downloadCsv, toCsv } from "@/lib/csv";
 import type { ApplicationStage } from "@prisma/client";
 
 export type ApplicationRow = {
@@ -31,6 +33,8 @@ export type ApplicationRow = {
   currentStageDate: string;
   referrer: string | null;
   source: string | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
   company: { name: string };
 };
 
@@ -49,30 +53,51 @@ export function ApplicationsTable({
     [applications, stageFilter]
   );
 
+  function handleExport() {
+    const csv = toCsv(filtered, [
+      { header: "公司", value: (a) => a.company.name },
+      { header: "岗位", value: (a) => a.title },
+      { header: "投递日期", value: (a) => new Date(a.appliedDate).toLocaleDateString() },
+      { header: "当前状态", value: (a) => STAGE_LABELS[a.currentStage] },
+      { header: "距上次更新(天)", value: (a) => daysSince(new Date(a.currentStageDate)) },
+      { header: "渠道", value: (a) => a.source ?? "" },
+      { header: "内推人", value: (a) => a.referrer ?? "" },
+      { header: "薪资下限(K)", value: (a) => a.salaryMin ?? "" },
+      { header: "薪资上限(K)", value: (a) => a.salaryMax ?? "" },
+    ]);
+    downloadCsv(`投递记录_${new Date().toISOString().slice(0, 10)}.csv`, csv);
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">按状态筛选：</span>
-        <Select
-          value={stageFilter}
-          onValueChange={(value) => setStageFilter(value ?? "ALL")}
-        >
-          <SelectTrigger className="w-48">
-            <SelectValue>
-              {(value: string) =>
-                value === "ALL" ? "全部" : STAGE_LABELS[value as ApplicationStage]
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">全部</SelectItem>
-            {Object.entries(STAGE_LABELS).map(([stage, label]) => (
-              <SelectItem key={stage} value={stage}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">按状态筛选：</span>
+          <Select
+            value={stageFilter}
+            onValueChange={(value) => setStageFilter(value ?? "ALL")}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue>
+                {(value: string) =>
+                  value === "ALL" ? "全部" : STAGE_LABELS[value as ApplicationStage]
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">全部</SelectItem>
+              {Object.entries(STAGE_LABELS).map(([stage, label]) => (
+                <SelectItem key={stage} value={stage}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleExport}>
+          <Download />
+          导出 CSV
+        </Button>
       </div>
 
       <Table>
