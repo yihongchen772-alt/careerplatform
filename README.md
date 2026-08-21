@@ -15,22 +15,24 @@
 
 托管在 Vercel，数据库是 Vercel 市场里的 Neon Postgres 集成（生产库和本地开发库是分开的两个实例）。
 
+代码仓库：https://github.com/yihongchen772-alt/careerplatform （私有仓库）
+
 ### 部署 / 更新线上版本
 
-当前是用 Vercel CLI 手动部署的（没有连 GitHub 自动部署）：
+已经连了 GitHub 自动部署——push 到 `main` 分支，Vercel 会自动构建部署，不用再手动跑 `vercel deploy`。
 
-```bash
-npx vercel deploy --prod
-```
-
-如果改了 `prisma/schema.prisma`，部署前记得也对生产库跑一次迁移：
+如果改了 `prisma/schema.prisma`，**push 前**记得先对生产库跑一次迁移（迁移不会自动执行）：
 
 ```bash
 npx prisma migrate deploy --schema prisma/schema.prisma
 # DATABASE_URL 需要临时指向生产库（Neon 的 unpooled 连接串，在 Vercel 项目设置 -> Environment Variables 里能看到）
 ```
 
-以后如果想要"push 到 GitHub 自动部署"，去 Vercel 项目设置里连一个 Git 仓库即可（`vercel.link/git`）。
+如果需要手动触发一次部署（不想等 push），还是可以用：
+
+```bash
+npx vercel deploy --prod
+```
 
 ## 本地开发
 
