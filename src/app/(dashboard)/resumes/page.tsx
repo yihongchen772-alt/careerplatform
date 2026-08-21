@@ -1,0 +1,29 @@
+import { db } from "@/lib/db";
+import { requireUser } from "@/lib/session";
+import { AddResumeDialog } from "@/components/resumes/add-resume-dialog";
+import { ResumeList } from "@/components/resumes/resume-list";
+
+export default async function ResumesPage() {
+  const user = await requireUser();
+
+  const resumes = await db.resumeVersion.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">简历版本</h1>
+        <AddResumeDialog />
+      </div>
+
+      <ResumeList
+        resumes={resumes.map((r) => ({
+          ...r,
+          createdAt: r.createdAt.toISOString(),
+        }))}
+      />
+    </div>
+  );
+}

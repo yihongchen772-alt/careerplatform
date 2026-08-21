@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Auth (NextAuth / Auth.js) ----------
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  passwordHash   String?
+  name           String?
+  school         String?
+  targetTrack    String?
+  graduationYear Int?
+  emailVerified  DateTime?
+  image          String?
+  createdAt      DateTime  @default(now())
+
+  accounts       Account[]
+  sessions       Session[]
+  positions      Position[]
+  applications   Application[]
+  resumeVersions ResumeVersion[]
+  reminders      Reminder[]
+  addedCompanies Company[]
+  attachments    Attachment[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------- Domain ----------
+
+model Company {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  industry      String?
+  size          String?
+  logoUrl       String?
+  careerUrl     String?
+  sector        String?
+  verified      Boolean  @default(false)
+  addedByUserId String?
+  createdAt     DateTime @default(now())
+
+  addedBy      User?         @relation(fields: [addedByUserId], references: [id])
+  positions    Position[]
+  applications Application[]
+}
+
+enum PositionStatus {
+  EVALUATING
+  PLANNED
+  APPLIED
+  DROPPED
+}
+
+model Position {
+  id             String         @id @default(cuid())
+  userId         String
+  companyId      String
+  title          String
+  track          String?
+  location       String?
+  salaryMin      Int?
+  salaryMax      Int?
+  jdText         String?        @db.Text
+  jdUrl          String?
+  source         String?
+  scoreBreakdown Json?
+  interestScore  Int?
+  deadline       DateTime?
+  status         PositionStatus @default(EVALUATING)
+  createdAt      DateTime       @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company      Company       @relation(fields: [companyId], references: [id])
+  applications Application[]
+
+  @@index([userId])
+}
+
+enum ApplicationStage {
+  APPLIED
+  SCREENING
+  OA
+  INTERVIEW_1
+  INTERVIEW_2
+  INTERVIEW_3
+  HR_INTERVIEW
+  OFFER
+  REJECTED
+  ACCEPTED
+  DECLINED
+}
+
+model Application {
+  id               String           @id @default(cuid())
+  userId           String
+  positionId       String?
+  companyId        String
+  resumeVersionId  String?
+  title            String
+  appliedDate      DateTime
+  referrer         String?
+  source           String?
+  currentStage     ApplicationStage @default(APPLIED)
+  currentStageDate DateTime         @default(now())
+  salaryMin        Int?
+  salaryMax        Int?
+  offerNote        String?          @db.Text
+  createdAt        DateTime         @default(now())
+
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  position      Position?       @relation(fields: [positionId], references: [id])
+  company       Company         @relation(fields: [companyId], references: [id])
+  resumeVersion ResumeVersion?  @relation(fields: [resumeVersionId], references: [id])
+  stageHistory  StageHistory[]
+  reminders     Reminder[]
+  attachments   Attachment[]
+
+  @@index([userId])
+}
+
+model StageHistory {
+  id              String           @id @default(cuid())
+  applicationId   String
+  stage           ApplicationStage
+  enteredAt       DateTime         @default(now())
+  note            String?          @db.Text
+  interviewFormat String?
+  interviewer     String?
+  nextDeadline    DateTime?
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+
+  @@index([applicationId])
+}
+
+model Attachment {
+  id             String   @id @default(cuid())
+  userId         String
+  applicationId  String?
+  stageHistoryId String?
+  url            String
+  name           String
+  createdAt      DateTime @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application  Application?  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  stageHistory StageHistory? @relation(fields: [stageHistoryId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([applicationId])
+  @@index([stageHistoryId])
+}
+
+model ResumeVersion {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  fileUrl     String?
+  targetTrack String?
+  createdAt   DateTime @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@index([userId])
+}
+
+model Reminder {
+  id            String    @id @default(cuid())
+  userId        String
+  applicationId String?
+  dueDate       DateTime
+  type          String
+  note          String?
+  done          Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application? @relation(fields: [applicationId], references: [id])
+
+  @@index([userId])
+}
