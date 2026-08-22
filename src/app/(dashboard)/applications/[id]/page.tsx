@@ -7,7 +7,9 @@ import { AddStageForm } from "@/components/applications/add-stage-form";
 import { AttachmentList } from "@/components/applications/attachment-list";
 import { ApplicationAttachments } from "@/components/applications/application-attachments";
 import { OfferEditForm } from "@/components/applications/offer-edit-form";
+import { InterviewQaCard } from "@/components/applications/interview-qa-card";
 import { STAGE_BADGE_VARIANT, STAGE_LABELS } from "@/lib/stage-labels";
+import type { InterviewQa } from "@/lib/validation";
 
 export default async function ApplicationDetailPage({
   params,
@@ -17,18 +19,25 @@ export default async function ApplicationDetailPage({
   const { id } = await params;
   const user = await requireUser();
 
-  const application = await db.application.findFirst({
-    where: { id, userId: user.id },
-    include: {
-      company: true,
-      resumeVersion: true,
-      attachments: true,
-      stageHistory: {
-        orderBy: { enteredAt: "asc" },
-        include: { attachments: true },
+  const [application, resumeVersions] = await Promise.all([
+    db.application.findFirst({
+      where: { id, userId: user.id },
+      include: {
+        company: true,
+        resumeVersion: true,
+        attachments: true,
+        interviewQA: true,
+        stageHistory: {
+          orderBy: { enteredAt: "asc" },
+          include: { attachments: true },
+        },
       },
-    },
-  });
+    }),
+    db.resumeVersion.findMany({
+      where: { userId: user.id },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   if (!application) notFound();
 
@@ -112,6 +121,17 @@ export default async function ApplicationDetailPage({
           />
         </CardContent>
       </Card>
+
+      <InterviewQaCard
+        applicationId={application.id}
+        resumeVersions={resumeVersions}
+        defaultResumeVersionId={application.resumeVersionId}
+        initialResult={
+          application.interviewQA
+            ? (application.interviewQA.content as InterviewQa)
+            : null
+        }
+      />
     </div>
   );
 }

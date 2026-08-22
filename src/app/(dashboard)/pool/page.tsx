@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/session";
 import { Card, CardContent } from "@/components/ui/card";
 import { AddPositionDialog } from "@/components/pool/add-position-dialog";
 import { PoolTable } from "@/components/pool/pool-table";
+import type { InterviewPrep } from "@/lib/validation";
 
 export default async function PoolPage() {
   const user = await requireUser();
@@ -10,7 +11,7 @@ export default async function PoolPage() {
   const [positions, resumeVersions] = await Promise.all([
     db.position.findMany({
       where: { userId: user.id },
-      include: { company: true },
+      include: { company: true, interviewPrep: true },
       orderBy: { createdAt: "desc" },
     }),
     db.resumeVersion.findMany({
@@ -35,6 +36,9 @@ export default async function PoolPage() {
             positions={positions.map((p) => ({
               ...p,
               deadline: p.deadline?.toISOString() ?? null,
+              interviewPrep: p.interviewPrep
+                ? (p.interviewPrep.content as InterviewPrep)
+                : null,
             }))}
             resumeVersions={resumeVersions}
             defaultResumeVersionId={defaultResumeVersionId}

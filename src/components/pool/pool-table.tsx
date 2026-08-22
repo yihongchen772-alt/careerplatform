@@ -24,7 +24,12 @@ import { deletePosition } from "@/lib/actions/positions";
 import { POSITION_STATUS_LABELS } from "@/lib/stage-labels";
 import { daysUntil } from "@/lib/reminders";
 import { PositionFormDialog } from "@/components/pool/position-form-dialog";
+import {
+  InterviewPrepDialog,
+  InterviewPrepTrigger,
+} from "@/components/pool/interview-prep-dialog";
 import type { PositionStatus } from "@prisma/client";
+import type { InterviewPrep } from "@/lib/validation";
 
 export type PoolPosition = {
   id: string;
@@ -40,6 +45,7 @@ export type PoolPosition = {
   jdText: string | null;
   source: string | null;
   scoreBreakdown: unknown;
+  interviewPrep: InterviewPrep | null;
   company: { name: string };
 };
 
@@ -84,6 +90,7 @@ export function PoolTable({
 }) {
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [matchingId, setMatchingId] = useState<string | null>(null);
+  const [prepId, setPrepId] = useState<string | null>(null);
   const [batchMarking, setBatchMarking] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -97,6 +104,7 @@ export function PoolTable({
   const markable = sorted.filter((p) => p.status !== "APPLIED");
   const marking = sorted.find((p) => p.id === markingId);
   const matching = sorted.find((p) => p.id === matchingId);
+  const preparing = sorted.find((p) => p.id === prepId);
   const selectedPositions = sorted.filter((p) => selected.has(p.id));
 
   function toggleSelected(id: string, checked: boolean) {
@@ -195,6 +203,7 @@ export function PoolTable({
                 </Badge>
                 <div className="flex flex-wrap justify-end gap-1">
                   <MatchResumeTrigger onClick={() => setMatchingId(p.id)} />
+                  <InterviewPrepTrigger onClick={() => setPrepId(p.id)} />
                   {p.status !== "APPLIED" && (
                     <Button
                       size="sm"
@@ -316,6 +325,7 @@ export function PoolTable({
                 </TableCell>
                 <TableCell className="space-x-2 text-right">
                   <MatchResumeTrigger onClick={() => setMatchingId(p.id)} />
+                  <InterviewPrepTrigger onClick={() => setPrepId(p.id)} />
                   {p.status !== "APPLIED" && (
                     <Button
                       size="sm"
@@ -360,6 +370,18 @@ export function PoolTable({
           )}
         </TableBody>
       </Table>
+
+      {preparing && (
+        <InterviewPrepDialog
+          positionId={preparing.id}
+          positionLabel={`${preparing.company.name} · ${preparing.title}`}
+          resumeVersions={resumeVersions}
+          defaultResumeVersionId={defaultResumeVersionId}
+          initialResult={preparing.interviewPrep}
+          open={!!prepId}
+          onOpenChange={(open) => !open && setPrepId(null)}
+        />
+      )}
 
       {matching && (
         <MatchResumeDialog

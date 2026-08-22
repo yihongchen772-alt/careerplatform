@@ -7,7 +7,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { sendPasswordResetEmail } from "@/lib/email";
+import { encryptSecret } from "@/lib/crypto";
 import {
+  aiSettingsSchema,
   changePasswordSchema,
   requestPasswordResetSchema,
   resetPasswordSchema,
@@ -52,6 +54,32 @@ export async function changePassword(
     where: { id: user.id },
     data: { passwordHash },
   });
+}
+
+export async function updateAiSettings(input: z.infer<typeof aiSettingsSchema>) {
+  const user = await requireUser();
+  const data = aiSettingsSchema.parse(input);
+
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      aiProvider: data.provider,
+      // Never store the plaintext key — only the encrypted form ever hits the DB.
+      aiApiKeyEncrypted: encryptSecret(data.apiKey),
+      aiModel: data.model || null,
+    },
+  });
+
+  revalidatePath("/settings");
+}
+
+export async function clearAiSettings() {
+  const user = await requireUser();
+  await db.user.update({
+    where: { id: user.id },
+    data: { aiProvider: null, aiApiKeyEncrypted: null, aiModel: null },
+  });
+  revalidatePath("/settings");
 }
 
 export async function requestPasswordReset(

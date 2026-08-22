@@ -5,8 +5,6 @@ import { UserFacingError } from "@/lib/action-result";
 // larger allowance and still reads PDF resumes accurately.
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
 
-const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-
 export type GeminiFilePart = {
   mimeType: string;
   /** base64, no data: prefix */
@@ -32,17 +30,23 @@ export async function generateStructured({
   schema,
   thinkingBudget,
   timeoutMs = 60000,
+  apiKey: apiKeyOverride,
+  model: modelOverride,
 }: {
   prompt: string;
   file?: GeminiFilePart;
   schema: GeminiSchema;
   thinkingBudget: number;
   timeoutMs?: number;
+  /** BYOK: caller's own Gemini key/model, in preference to the shared one. */
+  apiKey?: string;
+  model?: string;
 }): Promise<unknown> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = apiKeyOverride ?? process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new GeminiError("尚未配置 Gemini API Key，联系管理员配置后再试");
   }
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelOverride ?? MODEL}:generateContent`;
 
   const parts: Record<string, unknown>[] = [];
   if (file) parts.push({ inlineData: file });
@@ -52,7 +56,7 @@ export async function generateStructured({
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    response = await fetch(ENDPOINT, {
+    response = await fetch(endpoint, {
       method: "POST",
       signal: controller.signal,
       headers: {

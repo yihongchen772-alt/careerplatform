@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
+import { AiSettingsForm } from "@/components/settings/ai-settings-form";
+import type { AiProviderId } from "@/lib/ai-provider-labels";
 
 export default async function SettingsPage() {
   const sessionUser = await requireUser();
@@ -27,6 +29,10 @@ export default async function SettingsPage() {
           }}
         />
         <ChangePasswordForm />
+        <AiSettingsForm
+          currentProvider={user.aiProvider as AiProviderId | null}
+          currentModel={user.aiModel}
+        />
       </div>
     </div>
   );

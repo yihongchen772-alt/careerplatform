@@ -33,6 +33,20 @@ export const resetPasswordSchema = z.object({
   newPassword: z.string().min(8, "密码至少 8 位"),
 });
 
+export const aiProviderValues = [
+  "gemini",
+  "openai",
+  "deepseek",
+  "kimi",
+  "anthropic",
+] as const;
+
+export const aiSettingsSchema = z.object({
+  provider: z.enum(aiProviderValues),
+  apiKey: z.string().min(1, "请填写 API Key"),
+  model: z.string().optional(),
+});
+
 export const positionStatusValues = [
   "EVALUATING",
   "PLANNED",
@@ -136,6 +150,34 @@ export const resumeCheckSchema = z.object({
 });
 
 export type ResumeCheck = z.infer<typeof resumeCheckSchema>;
+
+export const interviewPrepSchema = z.object({
+  summary: z.string(),
+  focusAreas: z.array(
+    z.object({
+      title: z.string(),
+      why: z.string(),
+      whatToPrepare: z.string(),
+    })
+  ),
+  likelyQuestionTypes: z.array(z.string()),
+});
+
+export type InterviewPrep = z.infer<typeof interviewPrepSchema>;
+
+export const interviewQaSchema = z.object({
+  summary: z.string(),
+  questions: z.array(
+    z.object({
+      question: z.string(),
+      category: z.string(),
+      referenceAnswer: z.string(),
+      tips: z.string(),
+    })
+  ),
+});
+
+export type InterviewQa = z.infer<typeof interviewQaSchema>;
 
 export const companyDirectoryEntrySchema = z.object({
   name: z.string().min(1, "公司名称必填"),
