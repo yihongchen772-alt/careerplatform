@@ -5,7 +5,13 @@ import { requireUser } from "@/lib/session";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { buildTodos, type Todo } from "@/lib/todos";
-import { STAGE_LABELS, STAGE_ORDER } from "@/lib/stage-labels";
+import {
+  computeFunnel,
+  computeOutcomes,
+  type FunnelLevel,
+  type FunnelOutcomes,
+} from "@/lib/funnel";
+import { STAGE_LABELS } from "@/lib/stage-labels";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -26,17 +32,18 @@ export default async function DashboardPage() {
     }),
   ]);
 
+  const funnelApps = await db.application.findMany({
+    where: { userId: user.id },
+    select: { currentStage: true, stageHistory: { select: { stage: true } } },
+  });
+
   const total = applications.length;
   const offers = applications.filter((a) => a.currentStage === "OFFER" || a.currentStage === "ACCEPTED").length;
   const rejected = applications.filter((a) => a.currentStage === "REJECTED" || a.currentStage === "DECLINED").length;
   const inProgress = total - offers - rejected;
 
-  const stageCounts = STAGE_ORDER.map((stage) => ({
-    stage,
-    count: applications.filter((a) => a.currentStage === stage).length,
-  }));
-  const maxCount = Math.max(1, ...stageCounts.map((s) => s.count));
-
+  const { levels } = computeFunnel(funnelApps);
+  const outcomes = computeOutcomes(funnelApps);
   const todos = buildTodos(applications, positions, stageHistories);
 
   return (
@@ -52,29 +59,64 @@ export default async function DashboardPage() {
         <StatCard label="已结束" value={rejected} icon={XCircle} muted />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>漏斗分布</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2.5">
-          {stageCounts.map(({ stage, count }) => (
-            <div key={stage} className="flex items-center gap-3 text-sm">
-              <span className="w-16 shrink-0 truncate text-xs text-muted-foreground sm:w-24 sm:text-sm">
-                {STAGE_LABELS[stage]}
-              </span>
-              <div className="h-5 flex-1 rounded-sm bg-muted">
-                <div
-                  className="h-5 rounded-r-sm bg-primary transition-all"
-                  style={{ width: `${(count / maxCount) * 100}%` }}
-                />
-              </div>
-              <span className="w-6 text-right font-medium">{count}</span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
+      <FunnelCard levels={levels} total={total} outcomes={outcomes} />
     </div>
+  );
+}
+
+function FunnelCard({
+  levels,
+  total,
+  outcomes,
+}: {
+  levels: FunnelLevel[];
+  total: number;
+  outcomes: FunnelOutcomes;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>投递漏斗</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          每一级是&ldquo;到达过这个阶段&rdquo;的投递数，右侧是相对上一级的转化率
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {total === 0 ? (
+          <p className="text-sm text-muted-foreground">还没有投递记录</p>
+        ) : (
+          <>
+            {levels.map((level) => (
+              <div key={level.stage} className="flex items-center gap-3 text-sm">
+                <span className="w-16 shrink-0 truncate text-xs text-muted-foreground sm:w-20 sm:text-sm">
+                  {STAGE_LABELS[level.stage]}
+                </span>
+                <div className="h-6 flex-1 overflow-hidden rounded-sm bg-muted">
+                  <div
+                    className="h-6 rounded-r-sm bg-primary"
+                    style={{ width: `${Math.max(level.shareOfTotal * 100, level.count > 0 ? 2 : 0)}%` }}
+                  />
+                </div>
+                <span className="w-6 shrink-0 text-right font-medium tabular-nums">
+                  {level.count}
+                </span>
+                <span className="w-10 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
+                  {level.stepRate === null
+                    ? ""
+                    : `${Math.round(level.stepRate * 100)}%`}
+                </span>
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-3 text-xs text-muted-foreground">
+              <span>已获 Offer {outcomes.offers}</span>
+              <span>已接受 {outcomes.accepted}</span>
+              <span>被拒 {outcomes.rejected}</span>
+              <span>本人拒绝 {outcomes.declined}</span>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -147,25 +189,25 @@ function StatCard({
 }) {
   return (
     <Card>
-      {/* Icon sits above the number on narrow screens; side-by-side would squeeze
-          the label into one-character-per-line vertical text. */}
-      <CardContent className="flex flex-col-reverse items-start gap-2 pt-6 sm:flex-row sm:justify-between sm:gap-0">
-        <div className="min-w-0">
-          <p className="truncate text-sm text-muted-foreground">{label}</p>
-          <p className="text-3xl font-semibold">{value}</p>
+      {/* Icon inline with the label rather than floating on the right — at four
+          cards across, the right-aligned version left a wide dead gap. */}
+      <CardContent className="space-y-1 pt-6">
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <Icon
+            className={
+              "size-4 shrink-0 " + (accent ? "text-primary" : muted ? "opacity-60" : "")
+            }
+          />
+          <span className="truncate text-sm">{label}</span>
         </div>
-        <div
+        <p
           className={
-            "flex size-9 shrink-0 items-center justify-center rounded-md " +
-            (accent
-              ? "bg-primary/10 text-primary"
-              : muted
-                ? "bg-muted text-muted-foreground/70"
-                : "bg-muted text-muted-foreground")
+            "text-4xl font-semibold tabular-nums " +
+            (accent ? "text-primary" : muted ? "text-muted-foreground" : "")
           }
         >
-          <Icon className="size-5" />
-        </div>
+          {value}
+        </p>
       </CardContent>
     </Card>
   );

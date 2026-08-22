@@ -36,6 +36,13 @@ export type PoolPosition = {
 
 type ResumeOption = { id: string; name: string };
 
+/** Tiered so a strong match stands out when skimming a long pool. */
+function scoreVariant(score: number): "default" | "secondary" | "outline" {
+  if (score >= 80) return "default";
+  if (score >= 60) return "secondary";
+  return "outline";
+}
+
 export function PoolTable({
   positions,
   resumeVersions,
@@ -122,7 +129,11 @@ export function PoolTable({
                     {p.title}
                   </p>
                 </div>
-                {p.interestScore !== null && <Badge>{p.interestScore}</Badge>}
+                {p.interestScore !== null && (
+                  <Badge variant={scoreVariant(p.interestScore)}>
+                    {p.interestScore}
+                  </Badge>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -233,7 +244,9 @@ export function PoolTable({
                 </TableCell>
                 <TableCell>
                   {p.interestScore !== null ? (
-                    <Badge>{p.interestScore}</Badge>
+                    <Badge variant={scoreVariant(p.interestScore)}>
+                      {p.interestScore}
+                    </Badge>
                   ) : (
                     "-"
                   )}

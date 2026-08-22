@@ -173,16 +173,21 @@ export function DashboardNav({ userLabel }: { userLabel: string }) {
     <>
       <GlobalSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
 
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — sticky so the nav stays reachable on long pages
+          instead of scrolling away with the content. */}
       <aside className="hidden w-56 shrink-0 border-r bg-card md:block">
-        <NavContent
-          userLabel={userLabel}
-          onSearchClick={() => setSearchOpen(true)}
-        />
+        <div className="sticky top-0 h-screen overflow-y-auto">
+          <NavContent
+            userLabel={userLabel}
+            onSearchClick={() => setSearchOpen(true)}
+          />
+        </div>
       </aside>
 
       {/* Mobile top bar */}
-      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b bg-card px-3 pt-[env(safe-area-inset-top)] md:hidden">
+      {/* h-14 is the bar itself; the notch inset is added as padding on top, so
+          the real height is 3.5rem + inset — layout's pt must match. */}
+      <header className="fixed inset-x-0 top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-2 border-b bg-card px-3 pt-[env(safe-area-inset-top)] md:hidden">
         <Button
           variant="ghost"
           size="icon"

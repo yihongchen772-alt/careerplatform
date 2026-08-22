@@ -11,8 +11,15 @@ export default async function DashboardLayout({
   return (
     <div className="flex min-h-screen flex-1">
       <DashboardNav userLabel={user.name ?? user.email ?? ""} />
-      {/* pt-14 clears the fixed mobile top bar; md drops it since the bar is hidden */}
-      <main className="flex-1 overflow-x-hidden px-4 pt-18 pb-[env(safe-area-inset-bottom)] md:p-6">
+      {/*
+        min-w-0 (not overflow-x-hidden) keeps wide children from stretching the
+        flex item: overflow-x:hidden forces overflow-y to compute to auto, which
+        turns main into its own scroll box and breaks page scrolling on mobile.
+
+        Top padding must track the fixed mobile bar's real height — 3.5rem plus
+        the notch inset — or the notch area covers the first rows of content.
+      */}
+      <main className="min-w-0 flex-1 px-4 pb-16 pt-[calc(3.5rem+env(safe-area-inset-top)+1rem)] md:p-6 md:pb-16">
         {children}
       </main>
     </div>
