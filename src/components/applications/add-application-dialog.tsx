@@ -27,6 +27,7 @@ import {
   rememberValue,
   recallValue,
 } from "@/lib/remembered-values";
+import { todayKey } from "@/lib/dates";
 
 type ResumeOption = { id: string; name: string };
 
@@ -44,11 +45,23 @@ export function AddApplicationDialog({
   );
   const [companyName, setCompanyName] = useState("");
   const [title, setTitle] = useState("");
-  const [appliedDate, setAppliedDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
-  const [referrer, setReferrer] = useState(() => recallValue(LAST_REFERRER_KEY));
-  const [source, setSource] = useState(() => recallValue(LAST_SOURCE_KEY));
+  // Empty until the dialog opens. This component renders on the server (its
+  // trigger button is always on the page), and the local clock and localStorage
+  // exist only in the browser — reading them in the initializer would desync the
+  // server HTML from the first client render. Filling them on open also re-reads
+  // what another form just remembered, and keeps "today" right past midnight.
+  const [appliedDate, setAppliedDate] = useState("");
+  const [referrer, setReferrer] = useState("");
+  const [source, setSource] = useState("");
+
+  function handleOpenChange(next: boolean) {
+    if (next) {
+      setAppliedDate(todayKey());
+      setReferrer(recallValue(LAST_REFERRER_KEY));
+      setSource(recallValue(LAST_SOURCE_KEY));
+    }
+    setOpen(next);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -80,7 +93,7 @@ export function AddApplicationDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger render={<Button>+ 新增投递记录</Button>} />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>

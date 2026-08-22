@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { markPositionsApplied } from "@/lib/actions/positions";
 import { LAST_REFERRER_KEY, rememberValue, recallValue } from "@/lib/remembered-values";
+import { todayKey } from "@/lib/dates";
 
 type ResumeOption = { id: string; name: string };
 
@@ -40,9 +41,9 @@ export function MarkAppliedDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [loading, setLoading] = useState(false);
-  const [appliedDate, setAppliedDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  // Safe to read the clock and localStorage in the initializer: the parent only
+  // mounts this dialog once the user opens it, so it never renders on the server.
+  const [appliedDate, setAppliedDate] = useState(todayKey);
   const [referrer, setReferrer] = useState(() => recallValue(LAST_REFERRER_KEY));
   const [resumeVersionId, setResumeVersionId] = useState<string>(
     defaultResumeVersionId ?? ""

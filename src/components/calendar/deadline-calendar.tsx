@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CalendarDays } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
+import { toDateKey } from "@/lib/dates";
 
 export type CalendarEvent = {
   date: string;
@@ -15,12 +16,7 @@ export type CalendarEvent = {
 // Local calendar day, not UTC — react-day-picker's `selected` is a local-midnight
 // Date, so bucketing by `.toISOString()` (UTC) would shift events by a day for any
 // timezone ahead of UTC.
-function dayKey(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+const dayKey = toDateKey;
 
 export function DeadlineCalendar({ events }: { events: CalendarEvent[] }) {
   const [selected, setSelected] = useState<Date | undefined>(undefined);

@@ -23,6 +23,7 @@ import {
 import { STAGE_BADGE_VARIANT, STAGE_LABELS } from "@/lib/stage-labels";
 import { daysSince, isTerminalStage } from "@/lib/reminders";
 import { downloadCsv, toCsv } from "@/lib/csv";
+import { todayKey } from "@/lib/dates";
 import { toast } from "sonner";
 import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { deleteApplication } from "@/lib/actions/applications";
@@ -77,7 +78,7 @@ export function ApplicationsTable({
       { header: "薪资下限(K)", value: (a) => a.salaryMin ?? "" },
       { header: "薪资上限(K)", value: (a) => a.salaryMax ?? "" },
     ]);
-    downloadCsv(`投递记录_${new Date().toISOString().slice(0, 10)}.csv`, csv);
+    downloadCsv(`投递记录_${todayKey()}.csv`, csv);
   }
 
   return (

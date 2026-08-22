@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { GlobalSearchDialog } from "@/components/search/global-search-dialog";
+import { BrandMark } from "@/components/brand-mark";
 
 type NavLink = { href: string; label: string; icon: LucideIcon };
 
@@ -105,11 +106,7 @@ function NavContent({
     <div className="flex h-full flex-col justify-between p-4">
       <div className="space-y-5">
         <div className="flex items-center gap-2 px-2 text-lg font-semibold">
-          {/* Same indigo→violet gradient as the app icon, but drawn in CSS: a
-              downscaled raster of the full mark turns to mush at 28px. */}
-          <span className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-bold text-white shadow-sm">
-            秋
-          </span>
+          <BrandMark className="size-7 shrink-0 rounded-lg shadow-sm" />
           秋招追踪
         </div>
 

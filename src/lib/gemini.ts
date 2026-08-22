@@ -119,6 +119,11 @@ export async function fetchFileAsInlinePart(
   } catch {
     throw new GeminiError("读取简历文件失败，请稍后重试");
   }
+  // A 404 means the blob is gone while the DB row still points at it — retrying
+  // never fixes that, so say what actually works instead.
+  if (res.status === 404) {
+    throw new GeminiError("简历文件已丢失，请重新上传这份简历后再试");
+  }
   if (!res.ok) throw new GeminiError("读取简历文件失败，请稍后重试");
 
   const mimeType = (res.headers.get("content-type") ?? "").split(";")[0].trim();
