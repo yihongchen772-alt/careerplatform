@@ -1,7 +1,11 @@
 import { UserFacingError } from "@/lib/action-result";
 
-const ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent";
+// Free-tier quota is per-model per-day, and 3.6-flash only allows 20 calls —
+// enough to exhaust in one afternoon of testing. flash-lite has its own,
+// larger allowance and still reads PDF resumes accurately.
+const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
+
+const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 export type GeminiFilePart = {
   mimeType: string;
@@ -77,9 +81,7 @@ export async function generateStructured({
     console.error(`[gemini] ${response.status}`, detail.slice(0, 500));
 
     if (response.status === 429) {
-      throw new GeminiError(
-        "今日 AI 免费额度已用完（Gemini 免费版每天 20 次），明天恢复"
-      );
+      throw new GeminiError("今日 AI 免费额度已用完，明天恢复");
     }
     if (response.status === 400 || response.status === 403) {
       throw new GeminiError("AI 密钥无效或已过期，请联系管理员更换");
