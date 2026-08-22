@@ -187,6 +187,25 @@ export const personalTaskSchema = z.object({
   applicationId: z.string().optional().nullable(),
 });
 
+export const startInterviewSessionSchema = z.object({
+  resumeVersionId: z.string().min(1),
+  positionId: z.string().optional().nullable(),
+  targetRole: z.string().optional(),
+});
+
+export const sendInterviewMessageSchema = z.object({
+  content: z.string().min(1, "先打点字再发送"),
+});
+
+export const interviewFeedbackSchema = z.object({
+  overallScore: z.number().min(0).max(100),
+  strengths: z.array(z.string()),
+  improvements: z.array(z.string()),
+  summary: z.string(),
+});
+
+export type InterviewFeedback = z.infer<typeof interviewFeedbackSchema>;
+
 export const companyDirectoryEntrySchema = z.object({
   name: z.string().min(1, "公司名称必填"),
   careerUrl: z.string().url("请输入合法的链接"),

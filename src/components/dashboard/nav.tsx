@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Menu,
+  MessageSquare,
   Scale,
   Search,
   Send,
@@ -35,6 +36,7 @@ const groups: { label: string; links: NavLink[] }[] = [
     links: [
       { href: "/pool", label: "候选岗位池", icon: ListChecks },
       { href: "/applications", label: "投递记录", icon: Send },
+      { href: "/mock-interview", label: "AI 模拟面试", icon: MessageSquare },
       { href: "/interviews", label: "面经库", icon: BookOpen },
       { href: "/calendar", label: "日历视图", icon: CalendarDays },
       { href: "/insights", label: "转化率", icon: TrendingUp },

@@ -41,6 +41,7 @@ model User {
   interviewPreps InterviewPrep[]
   interviewQAs   InterviewQA[]
   personalTasks  PersonalTask[]
+  interviewSessions InterviewSession[]
 }
 
 model Account {
@@ -128,6 +129,7 @@ model Position {
   applications Application[]
   interviewPrep InterviewPrep?
   personalTasks PersonalTask[]
+  interviewSessions InterviewSession[]
 
   @@index([userId])
 }
@@ -223,8 +225,9 @@ model ResumeVersion {
   checkedAt   DateTime?
   createdAt   DateTime @default(now())
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  applications Application[]
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications     Application[]
+  interviewSessions InterviewSession[]
 
   @@index([userId])
 }
@@ -286,5 +289,53 @@ model PersonalTask {
   application Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+}
+
+enum InterviewMessageRole {
+  USER
+  ASSISTANT
+}
+
+enum InterviewSessionStatus {
+  ACTIVE
+  ENDED
+}
+
+// A real back-and-forth mock interview — distinct from InterviewQA (a
+// one-shot question bank). This is multi-turn, so it costs several AI calls
+// per session instead of one; gated behind the user having their own API
+// key configured (see src/lib/actions/interview-session.ts) so one long
+// session can't burn through the shared free-tier quota for everyone else.
+model InterviewSession {
+  id              String                  @id @default(cuid())
+  userId          String
+  resumeVersionId String
+  positionId      String?
+  // Free-text fallback ("后端开发") when no specific candidate position was
+  // picked — the interview still needs *some* target to ask about.
+  targetRole      String?
+  status          InterviewSessionStatus  @default(ACTIVE)
+  feedback        Json?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resumeVersion ResumeVersion      @relation(fields: [resumeVersionId], references: [id])
+  position      Position?          @relation(fields: [positionId], references: [id])
+  messages      InterviewMessage[]
+
+  @@index([userId])
+}
+
+model InterviewMessage {
+  id        String               @id @default(cuid())
+  sessionId String
+  role      InterviewMessageRole
+  content   String               @db.Text
+  createdAt DateTime             @default(now())
+
+  session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
 }
 
