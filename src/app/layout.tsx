@@ -39,12 +39,37 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Runs before hydration so the theme is already correct on first paint —
+// without this the page would flash the default indigo/light theme and then
+// snap to whatever the user actually picked once ThemeProvider mounts.
+// Keep this logic identical to applyTheme() in src/lib/theme.ts.
+const NO_FLASH_THEME_SCRIPT = `
+(function () {
+  try {
+    var mode = localStorage.getItem("careerplatform:theme-mode") || "system";
+    var palette = localStorage.getItem("careerplatform:theme-palette") || "indigo";
+    var isDark = mode === "dark" || (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    var root = document.documentElement;
+    if (isDark) root.classList.add("dark");
+    root.setAttribute("data-palette", palette);
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="zh"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // The no-flash script below mutates this element's class/data-palette
+      // before React hydrates, on purpose — that intentional mismatch is
+      // exactly what suppressHydrationWarning exists for (same approach
+      // next-themes itself uses), scoped to just this one element.
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
         <ServiceWorkerRegister />

@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/session";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
+import { AppearanceForm } from "@/components/settings/appearance-form";
 import type { AiProviderId } from "@/lib/ai-provider-labels";
 
 export default async function SettingsPage() {
@@ -29,6 +30,7 @@ export default async function SettingsPage() {
           }}
         />
         <ChangePasswordForm />
+        <AppearanceForm />
         <AiSettingsForm
           currentProvider={user.aiProvider as AiProviderId | null}
           currentModel={user.aiModel}
