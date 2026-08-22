@@ -208,7 +208,9 @@ export async function parseJd(input: {
   text?: string;
 }): Promise<ParsedJd> {
   const sessionUser = await requireUser();
-  const user = await db.user.findUniqueOrThrow({
+  // A valid session whose row is gone shouldn't 500 the parse — scoring just
+  // falls back to "no preferences given", which the prompt handles explicitly.
+  const user = (await db.user.findUnique({
     where: { id: sessionUser.id },
     select: {
       targetTrack: true,
@@ -216,7 +218,12 @@ export async function parseJd(input: {
       preferredCities: true,
       expectedSalaryMin: true,
     },
-  });
+  })) ?? {
+    targetTrack: null,
+    skills: null,
+    preferredCities: null,
+    expectedSalaryMin: null,
+  };
 
   const pasted = input.text?.trim();
   if (pasted) {

@@ -98,7 +98,91 @@ export function PoolTable({
         </div>
       )}
 
-      <Table>
+      {/* Mobile: cards. A 9-column table is unreadable under ~400px. */}
+      <div className="space-y-3 md:hidden">
+        {sorted.map((p) => {
+          const deadline = p.deadline ? new Date(p.deadline) : null;
+          const daysLeft = deadline ? daysUntil(deadline) : null;
+          return (
+            <div key={p.id} className="space-y-2 rounded-lg border p-3">
+              <div className="flex items-start gap-2">
+                {p.status !== "APPLIED" && (
+                  <Checkbox
+                    className="mt-1"
+                    checked={selected.has(p.id)}
+                    onCheckedChange={(checked) =>
+                      toggleSelected(p.id, checked === true)
+                    }
+                    aria-label={`选择 ${p.title}`}
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{p.company.name}</p>
+                  <p className="truncate text-sm text-muted-foreground">
+                    {p.title}
+                  </p>
+                </div>
+                {p.interestScore !== null && <Badge>{p.interestScore}</Badge>}
+              </div>
+
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {p.track && <span>{p.track}</span>}
+                {p.location && <span>{p.location}</span>}
+                {(p.salaryMin || p.salaryMax) && (
+                  <span>
+                    {p.salaryMin ?? "?"}-{p.salaryMax ?? "?"}K
+                  </span>
+                )}
+                {deadline && (
+                  <span
+                    className={
+                      daysLeft !== null && daysLeft <= 5
+                        ? "font-medium text-destructive"
+                        : ""
+                    }
+                  >
+                    {deadline.toLocaleDateString()} 截止
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <Badge variant="outline">
+                  {POSITION_STATUS_LABELS[p.status]}
+                </Badge>
+                <div className="flex gap-1">
+                  {p.status !== "APPLIED" && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setMarkingId(p.id)}
+                    >
+                      标记已投
+                    </Button>
+                  )}
+                  <ConfirmDeleteButton
+                    trigger={
+                      <Button size="sm" variant="ghost">
+                        删除
+                      </Button>
+                    }
+                    title={`确定删除 ${p.company.name} · ${p.title} 吗？`}
+                    onConfirm={() => handleDelete(p.id)}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {sorted.length === 0 && (
+          <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-12 text-center text-muted-foreground">
+            <ListChecks className="size-8 text-muted-foreground/50" />
+            <span className="text-sm">候选池为空，先添加一个感兴趣的岗位吧</span>
+          </div>
+        )}
+      </div>
+
+      <Table className="hidden md:table">
         <TableHeader>
           <TableRow>
             <TableHead className="w-8">

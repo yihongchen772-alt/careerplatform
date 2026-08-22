@@ -154,7 +154,7 @@ export function AddPositionDialog() {
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="公司名称 *">
               <Input
                 value={form.companyName}
@@ -219,7 +219,7 @@ export function AddPositionDialog() {
                 AI 打分依据：{scoreReason}
               </p>
             )}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Field label="技术栈匹配">
                 <Input
                   type="number"

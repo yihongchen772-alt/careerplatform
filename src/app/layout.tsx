@@ -34,6 +34,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#4f46e5",
+  // Let the page paint under the notch/home indicator; layout adds
+  // env(safe-area-inset-*) padding so nothing lands under them.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

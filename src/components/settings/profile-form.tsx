@@ -67,7 +67,7 @@ export function ProfileForm({
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">昵称</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -111,7 +111,7 @@ export function ProfileForm({
                 placeholder="例如：Java、Spring Boot、MySQL、Redis，做过分布式项目"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">期望城市</Label>
                 <Input

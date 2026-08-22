@@ -10,6 +10,7 @@ import {
   FileText,
   LayoutDashboard,
   ListChecks,
+  Menu,
   Scale,
   Search,
   Send,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { GlobalSearchDialog } from "@/components/search/global-search-dialog";
 
 type NavLink = { href: string; label: string; icon: LucideIcon };
@@ -47,11 +49,29 @@ const groups: { label: string; links: NavLink[] }[] = [
   },
 ];
 
-function NavItem({ link, active }: { link: NavLink; active: boolean }) {
+const allLinks = [overview, ...groups.flatMap((g) => g.links)];
+
+export function currentPageLabel(pathname: string): string {
+  const match = allLinks
+    .filter((l) => pathname.startsWith(l.href))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  return match?.label ?? "秋招追踪";
+}
+
+function NavItem({
+  link,
+  active,
+  onNavigate,
+}: {
+  link: NavLink;
+  active: boolean;
+  onNavigate?: () => void;
+}) {
   const Icon = link.icon;
   return (
     <Link
       href={link.href}
+      onClick={onNavigate}
       className={cn(
         "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
         active
@@ -65,10 +85,17 @@ function NavItem({ link, active }: { link: NavLink; active: boolean }) {
   );
 }
 
-export function DashboardNav({ userLabel }: { userLabel: string }) {
+function NavContent({
+  userLabel,
+  onSearchClick,
+  onNavigate,
+}: {
+  userLabel: string;
+  onSearchClick: () => void;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const isActive = (href: string) => pathname.startsWith(href);
-  const [searchOpen, setSearchOpen] = useState(false);
 
   return (
     <div className="flex h-full flex-col justify-between p-4">
@@ -82,19 +109,22 @@ export function DashboardNav({ userLabel }: { userLabel: string }) {
 
         <button
           type="button"
-          onClick={() => setSearchOpen(true)}
+          onClick={onSearchClick}
           className="flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <Search className="size-4 shrink-0" />
           搜索...
-          <span className="ml-auto text-xs text-muted-foreground/70">
+          <span className="ml-auto hidden text-xs text-muted-foreground/70 md:inline">
             ⌘/Ctrl K
           </span>
         </button>
-        <GlobalSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
 
         <nav className="space-y-1">
-          <NavItem link={overview} active={isActive(overview.href)} />
+          <NavItem
+            link={overview}
+            active={isActive(overview.href)}
+            onNavigate={onNavigate}
+          />
         </nav>
 
         {groups.map((group) => (
@@ -104,7 +134,12 @@ export function DashboardNav({ userLabel }: { userLabel: string }) {
             </p>
             <nav className="space-y-1">
               {group.links.map((link) => (
-                <NavItem key={link.href} link={link} active={isActive(link.href)} />
+                <NavItem
+                  key={link.href}
+                  link={link}
+                  active={isActive(link.href)}
+                  onNavigate={onNavigate}
+                />
               ))}
             </nav>
           </div>
@@ -122,5 +157,62 @@ export function DashboardNav({ userLabel }: { userLabel: string }) {
         </Button>
       </div>
     </div>
+  );
+}
+
+export function DashboardNav({ userLabel }: { userLabel: string }) {
+  const pathname = usePathname();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  return (
+    <>
+      <GlobalSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
+
+      {/* Desktop sidebar */}
+      <aside className="hidden w-56 shrink-0 border-r bg-card md:block">
+        <NavContent
+          userLabel={userLabel}
+          onSearchClick={() => setSearchOpen(true)}
+        />
+      </aside>
+
+      {/* Mobile top bar */}
+      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b bg-card px-3 pt-[env(safe-area-inset-top)] md:hidden">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="打开菜单"
+          onClick={() => setDrawerOpen(true)}
+        >
+          <Menu className="size-5" />
+        </Button>
+        <span className="font-semibold">{currentPageLabel(pathname)}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="搜索"
+          className="ml-auto"
+          onClick={() => setSearchOpen(true)}
+        >
+          <Search className="size-5" />
+        </Button>
+      </header>
+
+      {/* Mobile drawer */}
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent side="left" className="w-72 p-0">
+          <SheetTitle className="sr-only">导航菜单</SheetTitle>
+          <NavContent
+            userLabel={userLabel}
+            onSearchClick={() => {
+              setDrawerOpen(false);
+              setSearchOpen(true);
+            }}
+            onNavigate={() => setDrawerOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

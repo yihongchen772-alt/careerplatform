@@ -57,7 +57,7 @@ export default async function DashboardPage() {
         <CardContent className="space-y-2.5">
           {stageCounts.map(({ stage, count }) => (
             <div key={stage} className="flex items-center gap-3 text-sm">
-              <span className="w-24 shrink-0 text-muted-foreground">
+              <span className="w-16 shrink-0 truncate text-xs text-muted-foreground sm:w-24 sm:text-sm">
                 {STAGE_LABELS[stage]}
               </span>
               <div className="h-5 flex-1 rounded-sm bg-muted">
@@ -138,9 +138,11 @@ function StatCard({
 }) {
   return (
     <Card>
-      <CardContent className="flex items-start justify-between pt-6">
-        <div>
-          <p className="text-sm text-muted-foreground">{label}</p>
+      {/* Icon sits above the number on narrow screens; side-by-side would squeeze
+          the label into one-character-per-line vertical text. */}
+      <CardContent className="flex flex-col-reverse items-start gap-2 pt-6 sm:flex-row sm:justify-between sm:gap-0">
+        <div className="min-w-0">
+          <p className="truncate text-sm text-muted-foreground">{label}</p>
           <p className="text-3xl font-semibold">{value}</p>
         </div>
         <div

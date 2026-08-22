@@ -70,14 +70,14 @@ export function ApplicationsTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">按状态筛选：</span>
+          <span className="shrink-0 text-sm text-muted-foreground">按状态筛选：</span>
           <Select
             value={stageFilter}
             onValueChange={(value) => setStageFilter(value ?? "ALL")}
           >
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue>
                 {(value: string) =>
                   value === "ALL" ? "全部" : STAGE_LABELS[value as ApplicationStage]
@@ -94,13 +94,63 @@ export function ApplicationsTable({
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" size="sm" onClick={handleExport}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 self-start sm:self-auto"
+          onClick={handleExport}
+        >
           <Download />
           导出 CSV
         </Button>
       </div>
 
-      <Table>
+      {/* Mobile: cards. The 6-column table is unreadable under ~400px. */}
+      <div className="space-y-3 md:hidden">
+        {filtered.map((app) => {
+          const stale = daysSince(new Date(app.currentStageDate));
+          const terminal = isTerminalStage(app.currentStage);
+          return (
+            <Link
+              key={app.id}
+              href={`/applications/${app.id}`}
+              className="block space-y-2 rounded-lg border p-3 transition-colors hover:bg-muted"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{app.company.name}</p>
+                  <p className="truncate text-sm text-muted-foreground">
+                    {app.title}
+                  </p>
+                </div>
+                <Badge variant={STAGE_BADGE_VARIANT[app.currentStage]}>
+                  {STAGE_LABELS[app.currentStage]}
+                </Badge>
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>{new Date(app.appliedDate).toLocaleDateString()} 投递</span>
+                <span
+                  className={
+                    !terminal && stale >= 14 ? "font-medium text-destructive" : ""
+                  }
+                >
+                  {stale} 天未更新
+                </span>
+                {app.source && <span>{app.source}</span>}
+                {app.referrer && <span>内推：{app.referrer}</span>}
+              </div>
+            </Link>
+          );
+        })}
+        {filtered.length === 0 && (
+          <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-12 text-center text-muted-foreground">
+            <Send className="size-8 text-muted-foreground/50" />
+            <span className="text-sm">暂无投递记录</span>
+          </div>
+        )}
+      </div>
+
+      <Table className="hidden md:table">
         <TableHeader>
           <TableRow>
             <TableHead>公司 / 岗位</TableHead>

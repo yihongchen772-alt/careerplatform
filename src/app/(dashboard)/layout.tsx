@@ -10,10 +10,11 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-screen flex-1">
-      <aside className="w-56 shrink-0 border-r bg-card">
-        <DashboardNav userLabel={user.name ?? user.email ?? ""} />
-      </aside>
-      <main className="flex-1 overflow-x-auto p-6">{children}</main>
+      <DashboardNav userLabel={user.name ?? user.email ?? ""} />
+      {/* pt-14 clears the fixed mobile top bar; md drops it since the bar is hidden */}
+      <main className="flex-1 overflow-x-hidden px-4 pt-18 pb-[env(safe-area-inset-bottom)] md:p-6">
+        {children}
+      </main>
     </div>
   );
 }
