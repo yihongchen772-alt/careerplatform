@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   BookOpen,
+  Brain,
   Building2,
   CalendarDays,
   FileText,
@@ -52,7 +53,10 @@ const groups: { label: string; links: NavLink[] }[] = [
   },
   {
     label: "账号",
-    links: [{ href: "/settings", label: "账号设置", icon: Settings }],
+    links: [
+      { href: "/settings", label: "账号设置", icon: Settings },
+      { href: "/personality", label: "性格测试", icon: Brain },
+    ],
   },
 ];
 

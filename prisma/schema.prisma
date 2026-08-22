@@ -42,6 +42,7 @@ model User {
   interviewQAs   InterviewQA[]
   personalTasks  PersonalTask[]
   interviewSessions InterviewSession[]
+  personalityTestResults PersonalityTestResult[]
 }
 
 model Account {
@@ -337,5 +338,30 @@ model InterviewMessage {
   session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
+}
+
+enum PersonalityTestType {
+  OCEAN
+  MBTI
+  DISC
+  HOLLAND
+}
+
+// Self-authored, simplified self-assessments (see src/lib/personality-tests/)
+// — not reproductions of any proprietary or academic instrument. Scored
+// entirely client-side by fixed rules, no AI call involved; this table just
+// persists the result so a user can revisit it without retaking.
+model PersonalityTestResult {
+  id          String              @id @default(cuid())
+  userId      String
+  testType    PersonalityTestType
+  answers     Json
+  scores      Json
+  resultLabel String
+  createdAt   DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
