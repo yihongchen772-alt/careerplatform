@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { deleteResumeVersion, setDefaultResumeVersion } from "@/lib/actions/resumes";
 import { ResumeCheckDialog } from "@/components/resumes/resume-check-dialog";
+import { EditResumeDialog } from "@/components/resumes/edit-resume-dialog";
 import type { ResumeCheck } from "@/lib/validation";
 
 export type ResumeVersionRow = {
@@ -90,6 +91,17 @@ export function ResumeList({ resumes }: { resumes: ResumeVersionRow[] }) {
                   设为默认
                 </Button>
               )}
+              <EditResumeDialog
+                resumeVersionId={r.id}
+                initialName={r.name}
+                initialTargetTrack={r.targetTrack}
+                initialFileUrl={r.fileUrl}
+                trigger={
+                  <Button size="sm" variant="outline">
+                    编辑
+                  </Button>
+                }
+              />
               <ConfirmDeleteButton
                 trigger={
                   <Button size="sm" variant="ghost">

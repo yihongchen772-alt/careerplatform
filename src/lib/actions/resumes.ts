@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { del } from "@vercel/blob";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { resumeVersionSchema } from "@/lib/validation";
@@ -24,10 +26,66 @@ export async function createResumeVersion(
   revalidatePath("/resumes");
 }
 
+export async function updateResumeVersion(
+  id: string,
+  input: z.infer<typeof resumeVersionSchema>
+) {
+  const user = await requireUser();
+  const existing = await db.resumeVersion.findFirst({
+    where: { id, userId: user.id },
+  });
+  if (!existing) throw new Error("未找到该简历版本");
+
+  const data = resumeVersionSchema.parse(input);
+  const replacingFile = data.fileUrl && data.fileUrl !== existing.fileUrl;
+
+  await db.resumeVersion.update({
+    where: { id },
+    data: {
+      name: data.name,
+      fileUrl: data.fileUrl ?? existing.fileUrl,
+      targetTrack: data.targetTrack,
+      // A re-uploaded file invalidates any cached AI review of the old one.
+      ...(replacingFile && {
+        checkScore: null,
+        checkResult: Prisma.JsonNull,
+        checkedAt: null,
+      }),
+    },
+  });
+
+  // Best-effort: drop the superseded file so it doesn't leak in Blob storage
+  // the same way deleteResumeVersion used to.
+  if (replacingFile && existing.fileUrl) {
+    try {
+      await del(existing.fileUrl);
+    } catch {
+      // already gone, or transient — nothing left to roll back
+    }
+  }
+
+  revalidatePath("/resumes");
+  revalidatePath("/pool");
+}
+
 export async function deleteResumeVersion(id: string) {
   const user = await requireUser();
-  await db.resumeVersion.deleteMany({ where: { id, userId: user.id } });
+  const resume = await db.resumeVersion.findFirst({ where: { id, userId: user.id } });
+  if (!resume) return;
+
+  await db.resumeVersion.delete({ where: { id } });
+  // The PDF was never cleaned up here — every deleted version leaked its file
+  // in Blob storage indefinitely. Best-effort: the DB row is already gone.
+  if (resume.fileUrl) {
+    try {
+      await del(resume.fileUrl);
+    } catch {
+      // already gone, or transient — nothing left to roll back
+    }
+  }
+
   revalidatePath("/resumes");
+  revalidatePath("/pool");
 }
 
 export async function setDefaultResumeVersion(id: string) {

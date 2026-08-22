@@ -23,6 +23,7 @@ import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { deletePosition } from "@/lib/actions/positions";
 import { POSITION_STATUS_LABELS } from "@/lib/stage-labels";
 import { daysUntil } from "@/lib/reminders";
+import { PositionFormDialog } from "@/components/pool/position-form-dialog";
 import type { PositionStatus } from "@prisma/client";
 
 export type PoolPosition = {
@@ -35,6 +36,10 @@ export type PoolPosition = {
   interestScore: number | null;
   deadline: string | null;
   status: PositionStatus;
+  jdUrl: string | null;
+  jdText: string | null;
+  source: string | null;
+  scoreBreakdown: unknown;
   company: { name: string };
 };
 
@@ -45,6 +50,27 @@ function scoreVariant(score: number): "default" | "secondary" | "outline" {
   if (score >= 80) return "default";
   if (score >= 60) return "secondary";
   return "outline";
+}
+
+function toEditInitial(p: PoolPosition) {
+  return {
+    companyName: p.company.name,
+    title: p.title,
+    track: p.track,
+    location: p.location,
+    salaryMin: p.salaryMin,
+    salaryMax: p.salaryMax,
+    jdUrl: p.jdUrl,
+    jdText: p.jdText,
+    source: p.source,
+    deadline: p.deadline,
+    scoreBreakdown: p.scoreBreakdown as {
+      techFit?: number;
+      salary?: number;
+      location?: number;
+      growth?: number;
+    } | null,
+  };
 }
 
 export function PoolTable({
@@ -178,6 +204,16 @@ export function PoolTable({
                       标记已投
                     </Button>
                   )}
+                  <PositionFormDialog
+                    mode="edit"
+                    positionId={p.id}
+                    initial={toEditInitial(p)}
+                    trigger={
+                      <Button size="sm" variant="outline">
+                        编辑
+                      </Button>
+                    }
+                  />
                   <ConfirmDeleteButton
                     trigger={
                       <Button size="sm" variant="ghost">
@@ -289,6 +325,16 @@ export function PoolTable({
                       标记已投
                     </Button>
                   )}
+                  <PositionFormDialog
+                    mode="edit"
+                    positionId={p.id}
+                    initial={toEditInitial(p)}
+                    trigger={
+                      <Button size="sm" variant="outline">
+                        编辑
+                      </Button>
+                    }
+                  />
                   <ConfirmDeleteButton
                     trigger={
                       <Button size="sm" variant="ghost">

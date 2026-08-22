@@ -11,16 +11,22 @@ import { changePassword } from "@/lib/actions/account";
 export function ChangePasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast.error("两次输入的新密码不一致");
+      return;
+    }
     setLoading(true);
     try {
       await changePassword({ currentPassword, newPassword });
       toast.success("密码已更新");
       setCurrentPassword("");
       setNewPassword("");
+      setConfirmPassword("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "修改失败");
     } finally {
@@ -53,6 +59,19 @@ export function ChangePasswordForm() {
               onChange={(e) => setNewPassword(e.target.value)}
               required
             />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">确认新密码</Label>
+            <Input
+              type="password"
+              minLength={8}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+            />
+            {confirmPassword && newPassword !== confirmPassword && (
+              <p className="text-xs text-destructive">两次输入不一致</p>
+            )}
           </div>
           <Button type="submit" disabled={loading}>
             {loading ? "更新中..." : "更新密码"}
