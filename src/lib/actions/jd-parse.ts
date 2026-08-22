@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
+import { generateStructured } from "@/lib/gemini";
 
 const jdSchema = z.object({
   companyName: z.string().nullable(),
@@ -94,11 +95,6 @@ async function extractFields(
   jdText: string,
   prefs: UserPreferences
 ): Promise<ParsedJd> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("尚未配置 Gemini API Key，联系管理员配置后再试");
-  }
-
   const prompt = `你在帮一个求职者评估招聘岗位。下面给出求职者的偏好和一个岗位描述，请提取岗位信息并打分。
 
 求职者偏好：
@@ -121,81 +117,44 @@ ${jdText}
 
 重要：如果求职者没有填写某项偏好（比如没填技能），对应维度就给 5 分表示无法判断，并在 scoreReason 里说明"未填写XX，无法评估"，不要凭空猜测求职者的情况。`;
 
-  let response: Response;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000);
-    response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
-      {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            // Leaving the default budget on made this call ~10x slower (11s vs
-            // 1.2s). Scoring needs a little more headroom than pure extraction,
-            // but nowhere near the default. 0 is rejected with a 400.
-            thinkingConfig: { thinkingBudget: 512 },
-            responseSchema: {
-              type: "OBJECT",
-              properties: {
-                companyName: { type: "STRING", nullable: true },
-                title: { type: "STRING", nullable: true },
-                location: { type: "STRING", nullable: true },
-                track: { type: "STRING", nullable: true },
-                salaryMin: { type: "NUMBER", nullable: true },
-                salaryMax: { type: "NUMBER", nullable: true },
-                techFit: { type: "NUMBER" },
-                salaryScore: { type: "NUMBER" },
-                locationScore: { type: "NUMBER" },
-                growthScore: { type: "NUMBER" },
-                scoreReason: { type: "STRING" },
-              },
-              required: [
-                "companyName",
-                "title",
-                "location",
-                "track",
-                "salaryMin",
-                "salaryMax",
-                "techFit",
-                "salaryScore",
-                "locationScore",
-                "growthScore",
-                "scoreReason",
-              ],
-            },
-          },
-        }),
-      }
-    );
-    clearTimeout(timeout);
-  } catch {
-    throw new Error("AI 解析请求超时，请稍后重试或手动填写");
-  }
+  const raw = await generateStructured({
+    prompt,
+    // Extraction needs little reasoning; the default budget made this ~10x
+    // slower for identical output. 0 is rejected with a 400.
+    thinkingBudget: 512,
+    timeoutMs: 45000,
+    schema: {
+      type: "OBJECT",
+      properties: {
+        companyName: { type: "STRING", nullable: true },
+        title: { type: "STRING", nullable: true },
+        location: { type: "STRING", nullable: true },
+        track: { type: "STRING", nullable: true },
+        salaryMin: { type: "NUMBER", nullable: true },
+        salaryMax: { type: "NUMBER", nullable: true },
+        techFit: { type: "NUMBER" },
+        salaryScore: { type: "NUMBER" },
+        locationScore: { type: "NUMBER" },
+        growthScore: { type: "NUMBER" },
+        scoreReason: { type: "STRING" },
+      },
+      required: [
+        "companyName",
+        "title",
+        "location",
+        "track",
+        "salaryMin",
+        "salaryMax",
+        "techFit",
+        "salaryScore",
+        "locationScore",
+        "growthScore",
+        "scoreReason",
+      ],
+    },
+  });
 
-  if (!response.ok) {
-    throw new Error("AI 解析请求失败，请稍后重试或手动填写");
-  }
-
-  const data = await response.json();
-  const content: string =
-    data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-
-  let parsedJson: unknown;
-  try {
-    parsedJson = JSON.parse(content);
-  } catch {
-    throw new Error("解析结果格式异常，请手动填写");
-  }
-
-  const result = jdSchema.safeParse(parsedJson);
+  const result = jdSchema.safeParse(raw);
   if (!result.success) {
     throw new Error("解析结果格式异常，请手动填写");
   }

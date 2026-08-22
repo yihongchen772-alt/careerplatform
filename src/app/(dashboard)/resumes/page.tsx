@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { AddResumeDialog } from "@/components/resumes/add-resume-dialog";
 import { ResumeList } from "@/components/resumes/resume-list";
+import type { ResumeCheck } from "@/lib/validation";
 
 export default async function ResumesPage() {
   const user = await requireUser();
@@ -21,6 +22,8 @@ export default async function ResumesPage() {
       <ResumeList
         resumes={resumes.map((r) => ({
           ...r,
+          checkResult: (r.checkResult as ResumeCheck | null) ?? null,
+          checkedAt: r.checkedAt?.toISOString() ?? null,
           createdAt: r.createdAt.toISOString(),
         }))}
       />

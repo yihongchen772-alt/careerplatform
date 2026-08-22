@@ -13,6 +13,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { createApplication } from "@/lib/actions/applications";
 import {
   LAST_REFERRER_KEY,
@@ -21,9 +28,20 @@ import {
   recallValue,
 } from "@/lib/remembered-values";
 
-export function AddApplicationDialog() {
+type ResumeOption = { id: string; name: string };
+
+export function AddApplicationDialog({
+  resumeVersions = [],
+  defaultResumeVersionId,
+}: {
+  resumeVersions?: ResumeOption[];
+  defaultResumeVersionId?: string | null;
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resumeVersionId, setResumeVersionId] = useState(
+    defaultResumeVersionId ?? ""
+  );
   const [companyName, setCompanyName] = useState("");
   const [title, setTitle] = useState("");
   const [appliedDate, setAppliedDate] = useState(
@@ -46,6 +64,7 @@ export function AddApplicationDialog() {
         appliedDate: new Date(appliedDate),
         referrer: referrer || undefined,
         source: source || undefined,
+        resumeVersionId: resumeVersionId || undefined,
       });
       rememberValue(LAST_REFERRER_KEY, referrer);
       rememberValue(LAST_SOURCE_KEY, source);
@@ -101,6 +120,31 @@ export function AddApplicationDialog() {
               placeholder="官网 / 内推 / 猎头..."
             />
           </div>
+          {resumeVersions.length > 0 && (
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">使用的简历版本</Label>
+              <Select
+                value={resumeVersionId}
+                onValueChange={(v) => setResumeVersionId(v ?? "")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="选择简历版本（可选）">
+                    {(value: string) =>
+                      resumeVersions.find((r) => r.id === value)?.name ??
+                      "选择简历版本（可选）"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {resumeVersions.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <DialogFooter>
             <Button type="submit" disabled={loading}>
               {loading ? "保存中..." : "保存"}

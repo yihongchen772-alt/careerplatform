@@ -15,6 +15,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MarkAppliedDialog } from "@/components/pool/mark-applied-dialog";
+import {
+  MatchResumeDialog,
+  MatchResumeTrigger,
+} from "@/components/pool/match-resume-dialog";
 import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { deletePosition } from "@/lib/actions/positions";
 import { POSITION_STATUS_LABELS } from "@/lib/stage-labels";
@@ -53,6 +57,7 @@ export function PoolTable({
   defaultResumeVersionId?: string | null;
 }) {
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [matchingId, setMatchingId] = useState<string | null>(null);
   const [batchMarking, setBatchMarking] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -65,6 +70,7 @@ export function PoolTable({
   );
   const markable = sorted.filter((p) => p.status !== "APPLIED");
   const marking = sorted.find((p) => p.id === markingId);
+  const matching = sorted.find((p) => p.id === matchingId);
   const selectedPositions = sorted.filter((p) => selected.has(p.id));
 
   function toggleSelected(id: string, checked: boolean) {
@@ -161,7 +167,8 @@ export function PoolTable({
                 <Badge variant="outline">
                   {POSITION_STATUS_LABELS[p.status]}
                 </Badge>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap justify-end gap-1">
+                  <MatchResumeTrigger onClick={() => setMatchingId(p.id)} />
                   {p.status !== "APPLIED" && (
                     <Button
                       size="sm"
@@ -272,6 +279,7 @@ export function PoolTable({
                   </Badge>
                 </TableCell>
                 <TableCell className="space-x-2 text-right">
+                  <MatchResumeTrigger onClick={() => setMatchingId(p.id)} />
                   {p.status !== "APPLIED" && (
                     <Button
                       size="sm"
@@ -306,6 +314,15 @@ export function PoolTable({
           )}
         </TableBody>
       </Table>
+
+      {matching && (
+        <MatchResumeDialog
+          positionId={matching.id}
+          positionLabel={`${matching.company.name} · ${matching.title}`}
+          open={!!matchingId}
+          onOpenChange={(open) => !open && setMatchingId(null)}
+        />
+      )}
 
       {marking && (
         <MarkAppliedDialog

@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { deleteResumeVersion, setDefaultResumeVersion } from "@/lib/actions/resumes";
+import { ResumeCheckDialog } from "@/components/resumes/resume-check-dialog";
+import type { ResumeCheck } from "@/lib/validation";
 
 export type ResumeVersionRow = {
   id: string;
@@ -14,6 +16,9 @@ export type ResumeVersionRow = {
   fileUrl: string | null;
   targetTrack: string | null;
   isDefault: boolean;
+  checkScore: number | null;
+  checkResult: ResumeCheck | null;
+  checkedAt: string | null;
   createdAt: string;
 };
 
@@ -49,11 +54,15 @@ export function ResumeList({ resumes }: { resumes: ResumeVersionRow[] }) {
     <div className="grid gap-3 md:grid-cols-2">
       {resumes.map((r) => (
         <Card key={r.id}>
-          <CardContent className="flex items-start justify-between gap-2 pt-6">
+          <CardContent className="space-y-3 pt-6">
+            <div className="flex items-start justify-between gap-2">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <p className="font-medium">{r.name}</p>
                 {r.isDefault && <Badge>默认</Badge>}
+                {r.checkScore !== null && (
+                  <Badge variant="secondary">体检 {r.checkScore}</Badge>
+                )}
               </div>
               {r.targetTrack && (
                 <p className="text-sm text-muted-foreground">
@@ -90,6 +99,21 @@ export function ResumeList({ resumes }: { resumes: ResumeVersionRow[] }) {
                 title={`确定删除简历版本「${r.name}」吗？`}
                 onConfirm={() => handleDelete(r.id)}
               />
+            </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <ResumeCheckDialog
+                resumeVersionId={r.id}
+                resumeName={r.name}
+                hasFile={!!r.fileUrl}
+                initialResult={r.checkResult}
+                checkedAt={r.checkedAt}
+              />
+              {!r.fileUrl && (
+                <span className="text-xs text-muted-foreground">
+                  上传文件后才能体检
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>

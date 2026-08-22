@@ -202,6 +202,11 @@ model ResumeVersion {
   fileUrl     String?
   targetTrack String?
   isDefault   Boolean  @default(false)
+  // Cached AI review — each run is a paid call, so results persist instead of
+  // re-running every time the page is opened.
+  checkScore  Int?
+  checkResult Json?
+  checkedAt   DateTime?
   createdAt   DateTime @default(now())
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)

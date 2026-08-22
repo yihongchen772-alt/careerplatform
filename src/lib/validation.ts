@@ -117,6 +117,26 @@ export const companyDirectorySectors = [
   "其他",
 ] as const;
 
+// Lives here rather than beside the action: a "use server" module may only
+// export async functions, so a zod object there is a build error.
+export const resumeCheckSchema = z.object({
+  score: z.number().min(0).max(100),
+  completeness: z.number().min(0).max(10),
+  quantification: z.number().min(0).max(10),
+  clarity: z.number().min(0).max(10),
+  summary: z.string(),
+  strengths: z.array(z.string()),
+  issues: z.array(
+    z.object({
+      severity: z.enum(["high", "medium", "low"]),
+      text: z.string(),
+    })
+  ),
+  suggestions: z.array(z.string()),
+});
+
+export type ResumeCheck = z.infer<typeof resumeCheckSchema>;
+
 export const companyDirectoryEntrySchema = z.object({
   name: z.string().min(1, "公司名称必填"),
   careerUrl: z.string().url("请输入合法的链接"),

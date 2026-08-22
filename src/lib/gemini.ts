@@ -1,0 +1,113 @@
+const ENDPOINT =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent";
+
+export type GeminiFilePart = {
+  mimeType: string;
+  /** base64, no data: prefix */
+  data: string;
+};
+
+/** Minimal shape of the OpenAPI-ish schema Gemini expects for structured output. */
+export type GeminiSchema = Record<string, unknown>;
+
+export class GeminiError extends Error {}
+
+/**
+ * One structured-output call. Callers pass a response schema and get parsed JSON
+ * back; validation against a zod schema stays with the caller.
+ *
+ * `thinkingBudget` matters a lot here: leaving Gemini's default on made JD
+ * parsing ~10x slower (11s vs 1.2s) for identical output. Extraction wants a
+ * small budget, judgement tasks want more.
+ */
+export async function generateStructured({
+  prompt,
+  file,
+  schema,
+  thinkingBudget,
+  timeoutMs = 60000,
+}: {
+  prompt: string;
+  file?: GeminiFilePart;
+  schema: GeminiSchema;
+  thinkingBudget: number;
+  timeoutMs?: number;
+}): Promise<unknown> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new GeminiError("尚未配置 Gemini API Key，联系管理员配置后再试");
+  }
+
+  const parts: Record<string, unknown>[] = [];
+  if (file) parts.push({ inlineData: file });
+  parts.push({ text: prompt });
+
+  let response: Response;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    response = await fetch(ENDPOINT, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget },
+          responseSchema: schema,
+        },
+      }),
+    });
+    clearTimeout(timeout);
+  } catch {
+    throw new GeminiError("AI 请求超时，请稍后重试");
+  }
+
+  if (!response.ok) {
+    throw new GeminiError("AI 请求失败，请稍后重试");
+  }
+
+  const data = await response.json();
+  const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new GeminiError("AI 返回格式异常，请重试");
+  }
+}
+
+const ALLOWED_MIME = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+];
+
+/** Downloads an uploaded resume from blob storage into a Gemini inline part. */
+export async function fetchFileAsInlinePart(
+  url: string
+): Promise<GeminiFilePart> {
+  let res: Response;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+  } catch {
+    throw new GeminiError("读取简历文件失败，请稍后重试");
+  }
+  if (!res.ok) throw new GeminiError("读取简历文件失败，请稍后重试");
+
+  const mimeType = (res.headers.get("content-type") ?? "").split(";")[0].trim();
+  if (!ALLOWED_MIME.includes(mimeType)) {
+    throw new GeminiError("只支持 PDF 或图片格式的简历");
+  }
+
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { mimeType, data: buffer.toString("base64") };
+}

@@ -94,6 +94,9 @@ export function AddPositionDialog() {
         salaryMin: form.salaryMin ? Number(form.salaryMin) : undefined,
         salaryMax: form.salaryMax ? Number(form.salaryMax) : undefined,
         jdUrl: form.jdUrl || undefined,
+        // Keep the pasted JD: the resume-match feature compares against it, and
+        // it was previously thrown away after parsing.
+        jdText: jdText || undefined,
         source: form.source || undefined,
         deadline: form.deadline ? new Date(form.deadline) : undefined,
         scoreBreakdown: {
