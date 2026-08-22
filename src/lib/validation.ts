@@ -179,6 +179,14 @@ export const interviewQaSchema = z.object({
 
 export type InterviewQa = z.infer<typeof interviewQaSchema>;
 
+export const personalTaskSchema = z.object({
+  title: z.string().min(1, "标题必填"),
+  note: z.string().optional(),
+  dueDate: z.coerce.date().optional().nullable(),
+  positionId: z.string().optional().nullable(),
+  applicationId: z.string().optional().nullable(),
+});
+
 export const companyDirectoryEntrySchema = z.object({
   name: z.string().min(1, "公司名称必填"),
   careerUrl: z.string().url("请输入合法的链接"),

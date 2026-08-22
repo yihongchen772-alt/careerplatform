@@ -40,6 +40,7 @@ model User {
   attachments    Attachment[]
   interviewPreps InterviewPrep[]
   interviewQAs   InterviewQA[]
+  personalTasks  PersonalTask[]
 }
 
 model Account {
@@ -126,6 +127,7 @@ model Position {
   company      Company       @relation(fields: [companyId], references: [id])
   applications Application[]
   interviewPrep InterviewPrep?
+  personalTasks PersonalTask[]
 
   @@index([userId])
 }
@@ -168,6 +170,7 @@ model Application {
   stageHistory  StageHistory[]
   attachments   Attachment[]
   interviewQA   InterviewQA?
+  personalTasks PersonalTask[]
 
   @@index([userId])
 }
@@ -256,6 +259,31 @@ model InterviewQA {
 
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// User-authored reminders/plans — the auto-derived 待办 in todos.ts covers
+// deadlines the app already knows about (position deadline, stale
+// application, next-step date), but nothing lets the user write their own
+// plan ("周五前联系内推人", "复习 XX 准备二面"). This does. Optionally links
+// to a position or application so it can surface on that record's timeline,
+// but standalone tasks (positionId/applicationId both null) are equally
+// valid — not everything is tied to a specific job.
+model PersonalTask {
+  id            String    @id @default(cuid())
+  userId        String
+  title         String
+  note          String?   @db.Text
+  dueDate       DateTime?
+  done          Boolean   @default(false)
+  positionId    String?
+  applicationId String?
+  createdAt     DateTime  @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  position    Position?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  application Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
 
   @@index([userId])
 }

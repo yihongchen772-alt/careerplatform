@@ -12,25 +12,37 @@ import {
   type FunnelOutcomes,
 } from "@/lib/funnel";
 import { STAGE_LABELS } from "@/lib/stage-labels";
+import { PersonalTaskCard } from "@/components/dashboard/personal-task-card";
 
 export default async function DashboardPage() {
   const user = await requireUser();
 
-  const [applications, positions, stageHistories] = await Promise.all([
-    db.application.findMany({
-      where: { userId: user.id },
-      include: { company: true },
-      orderBy: { appliedDate: "desc" },
-    }),
-    db.position.findMany({
-      where: { userId: user.id, status: { not: "APPLIED" } },
-      include: { company: true },
-    }),
-    db.stageHistory.findMany({
-      where: { application: { userId: user.id }, nextDeadline: { not: null } },
-      include: { application: { include: { company: true } } },
-    }),
-  ]);
+  const [applications, positions, stageHistories, personalTasks, allPositions] =
+    await Promise.all([
+      db.application.findMany({
+        where: { userId: user.id },
+        include: { company: true },
+        orderBy: { appliedDate: "desc" },
+      }),
+      db.position.findMany({
+        where: { userId: user.id, status: { not: "APPLIED" } },
+        include: { company: true },
+      }),
+      db.stageHistory.findMany({
+        where: { application: { userId: user.id }, nextDeadline: { not: null } },
+        include: { application: { include: { company: true } } },
+      }),
+      db.personalTask.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+      }),
+      // Every position, not just the not-yet-applied ones above — a personal
+      // task can link to anything in the pool, including ones already applied.
+      db.position.findMany({
+        where: { userId: user.id },
+        include: { company: true },
+      }),
+    ]);
 
   const funnelApps = await db.application.findMany({
     where: { userId: user.id },
@@ -44,13 +56,38 @@ export default async function DashboardPage() {
 
   const { levels } = computeFunnel(funnelApps);
   const outcomes = computeOutcomes(funnelApps);
-  const todos = buildTodos(applications, positions, stageHistories);
+  const todos = buildTodos(applications, positions, stageHistories, personalTasks);
+
+  // Prefixed because a position and the application it turned into share the
+  // same company/title — without this the picker shows two identical rows.
+  const positionOptions = allPositions.map((p) => ({
+    id: p.id,
+    label: `候选：${p.company.name} · ${p.title}`,
+  }));
+  const applicationOptions = applications.map((a) => ({
+    id: a.id,
+    label: `投递：${a.company.name} · ${a.title}`,
+  }));
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">总览</h1>
 
       <TodoCard todos={todos} />
+
+      <PersonalTaskCard
+        tasks={personalTasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          note: t.note,
+          dueDate: t.dueDate?.toISOString() ?? null,
+          positionId: t.positionId,
+          applicationId: t.applicationId,
+          done: t.done,
+        }))}
+        positions={positionOptions}
+        applications={applicationOptions}
+      />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard label="总投递数" value={total} icon={Send} />

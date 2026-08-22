@@ -5,7 +5,7 @@ import { DeadlineCalendar, type CalendarEvent } from "@/components/calendar/dead
 export default async function CalendarPage() {
   const user = await requireUser();
 
-  const [positions, stageHistory] = await Promise.all([
+  const [positions, stageHistory, personalTasks] = await Promise.all([
     db.position.findMany({
       where: { userId: user.id, status: { not: "APPLIED" }, deadline: { not: null } },
       include: { company: true },
@@ -16,6 +16,9 @@ export default async function CalendarPage() {
         application: { userId: user.id },
       },
       include: { application: { include: { company: true } } },
+    }),
+    db.personalTask.findMany({
+      where: { userId: user.id, done: false, dueDate: { not: null } },
     }),
   ]);
 
@@ -30,6 +33,11 @@ export default async function CalendarPage() {
       label: `${h.application.company.name} · ${h.application.title} 下一步`,
       href: `/applications/${h.application.id}`,
     })),
+    ...personalTasks.map((t) => ({
+      date: t.dueDate!.toISOString(),
+      label: `📌 ${t.title}`,
+      href: "/dashboard",
+    })),
   ];
 
   return (
@@ -37,7 +45,7 @@ export default async function CalendarPage() {
       <div>
         <h1 className="text-2xl font-semibold">日历视图</h1>
         <p className="text-sm text-muted-foreground">
-          候选岗位投递截止日期 + 投递记录里填写的下一步截止日期，一次看清楚有没有撞期
+          候选岗位投递截止日期 + 投递记录里填写的下一步截止日期 + 你自己写的日程，一次看清楚有没有撞期
         </p>
       </div>
       <DeadlineCalendar events={events} />

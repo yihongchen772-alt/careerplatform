@@ -53,12 +53,43 @@ type TodoStageHistory = {
   };
 };
 
+export type TodoPersonalTask = {
+  id: string;
+  title: string;
+  dueDate: Date | null;
+  done: boolean;
+};
+
 export function buildTodos(
   applications: TodoApplication[],
   positions: TodoPosition[],
-  stageHistories: TodoStageHistory[]
+  stageHistories: TodoStageHistory[],
+  personalTasks: TodoPersonalTask[] = []
 ): Todo[] {
   const todos: Todo[] = [];
+
+  // User-written plans surface the same way the auto-derived ones do — due
+  // today/overdue is urgent, within the window is "soon". Undated tasks
+  // (a plain checklist item with no deadline) don't belong in a
+  // deadline-ranked list, so they're left out here and shown separately.
+  for (const t of personalTasks) {
+    if (t.done || !t.dueDate) continue;
+    const daysLeft = daysUntil(t.dueDate);
+    if (daysLeft > NEXT_STEP_WINDOW_DAYS) continue;
+    todos.push({
+      id: `task-${t.id}`,
+      label: t.title,
+      sublabel:
+        daysLeft < 0
+          ? `已过期 ${-daysLeft} 天`
+          : daysLeft === 0
+            ? "今天到期"
+            : `还有 ${daysLeft} 天`,
+      urgency: urgencyOf(daysLeft),
+      href: "/dashboard",
+      order: daysLeft,
+    });
+  }
 
   for (const app of findStaleApplications(applications)) {
     todos.push({
