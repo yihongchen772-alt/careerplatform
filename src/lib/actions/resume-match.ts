@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { fetchFileAsInlinePart, generateStructured } from "@/lib/gemini";
+import { getUserAiKey } from "@/lib/ai-providers";
 import {
   toActionResult,
   UserFacingError,
@@ -55,6 +56,11 @@ async function run(positionId: string): Promise<MatchResult> {
     throw new UserFacingError("还没有上传过简历文件，先去简历版本页上传一份");
   }
 
+  // Prefer the user's own Gemini key when configured; falls back to the
+  // shared server quota otherwise (this app has one, unlike the local
+  // single-user build).
+  const geminiKey = await getUserAiKey(user.id, "gemini");
+
   const coarse = !position.jdText;
 
   const jobDescription = [
@@ -91,6 +97,8 @@ ${coarse ? "\n注意：这个岗位没有提供 JD 正文，只能依据岗位�
       const raw = await generateStructured({
         prompt,
         file,
+        apiKey: geminiKey?.apiKey,
+        model: geminiKey?.model,
         thinkingBudget: 1024,
         timeoutMs: 90000,
         schema: {

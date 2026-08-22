@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { fetchFileAsInlinePart, generateStructured } from "@/lib/gemini";
+import { getUserAiKey } from "@/lib/ai-providers";
 import {
   toActionResult,
   UserFacingError,
@@ -30,6 +31,13 @@ async function run(resumeVersionId: string): Promise<ResumeCheck> {
     );
   }
 
+  // Prefer the user's own Gemini key when they've configured one; falls
+  // back to the shared server quota (via generateStructured's own
+  // GEMINI_API_KEY fallback) otherwise — this app has a shared quota, so
+  // unlike the local single-user build, missing a personal key here is not
+  // a hard error.
+  const geminiKey = await getUserAiKey(user.id, "gemini");
+
   const file = await fetchFileAsInlinePart(resume.fileUrl);
 
   const prompt = `你是一位帮中国应届生看秋招简历的资深 HR / 技术面试官。请审阅这份简历并给出评估。
@@ -51,6 +59,8 @@ async function run(resumeVersionId: string): Promise<ResumeCheck> {
   const raw = await generateStructured({
     prompt,
     file,
+    apiKey: geminiKey?.apiKey,
+    model: geminiKey?.model,
     // Judgement task over a whole document — needs more headroom than the
     // extraction calls, but still far below Gemini's default.
     thinkingBudget: 1024,

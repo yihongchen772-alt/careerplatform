@@ -5,7 +5,7 @@ import { ProfileForm } from "@/components/settings/profile-form";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
 import { AppearanceForm } from "@/components/settings/appearance-form";
-import type { AiProviderId } from "@/lib/ai-provider-labels";
+import { getAiKeysOverview } from "@/lib/actions/ai-keys";
 
 export default async function SettingsPage() {
   const sessionUser = await requireUser();
@@ -13,6 +13,7 @@ export default async function SettingsPage() {
   // Session cookie outliving the row (deleted account, restored DB) should send
   // the user to log in again, not render an error page.
   if (!user) redirect("/login");
+  const aiKeys = await getAiKeysOverview(user.id);
 
   return (
     <div className="space-y-6">
@@ -31,10 +32,7 @@ export default async function SettingsPage() {
         />
         <ChangePasswordForm />
         <AppearanceForm />
-        <AiSettingsForm
-          currentProvider={user.aiProvider as AiProviderId | null}
-          currentModel={user.aiModel}
-        />
+        <AiSettingsForm keys={aiKeys} />
       </div>
     </div>
   );

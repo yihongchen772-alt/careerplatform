@@ -26,20 +26,36 @@ export type UserAiConfig = {
   model: string;
 };
 
-/** Decrypts and returns the user's own AI config, or null if none is set. */
+/**
+ * Decrypts and returns the key for one specific provider, regardless of
+ * which provider is the user's default. File-reading features (JD parsing,
+ * resume check, resume match) always want "gemini" here specifically, since
+ * only Gemini's API can read a PDF/image directly — the user's default
+ * provider (e.g. DeepSeek) is irrelevant to that decision.
+ */
+export async function getUserAiKey(
+  userId: string,
+  provider: AiProviderId
+): Promise<UserAiConfig | null> {
+  const key = await db.aiKey.findUnique({
+    where: { userId_provider: { userId, provider } },
+  });
+  if (!key) return null;
+  return {
+    provider,
+    apiKey: decryptSecret(key.apiKeyEncrypted),
+    model: key.model || AI_PROVIDERS[provider].defaultModel,
+  };
+}
+
+/** Decrypts and returns the user's default-provider AI config, or null if none is set. */
 export async function getUserAiConfig(userId: string): Promise<UserAiConfig | null> {
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { aiProvider: true, aiApiKeyEncrypted: true, aiModel: true },
+    select: { defaultAiProvider: true },
   });
-  if (!user?.aiProvider || !user.aiApiKeyEncrypted) return null;
-
-  const provider = user.aiProvider as AiProviderId;
-  return {
-    provider,
-    apiKey: decryptSecret(user.aiApiKeyEncrypted),
-    model: user.aiModel || AI_PROVIDERS[provider].defaultModel,
-  };
+  if (!user?.defaultAiProvider) return null;
+  return getUserAiKey(userId, user.defaultAiProvider as AiProviderId);
 }
 
 /**
@@ -78,6 +94,11 @@ async function callOpenAiCompatible(
       },
       body: JSON.stringify({
         model,
+        // `prompt` here is already schema-annotated by withSchemaReminder(),
+        // which also satisfies OpenAI-compatible APIs' (confirmed on
+        // DeepSeek, same documented behavior on OpenAI) requirement that the
+        // literal word "json" appear somewhere in the prompt to use
+        // response_format: json_object.
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
       }),
@@ -199,12 +220,29 @@ export async function callTextAi({
         config.provider,
         config.apiKey,
         config.model,
-        prompt,
+        withSchemaReminder(prompt, schema),
         timeoutMs
       );
     case "anthropic":
-      return callAnthropic(config.apiKey, config.model, prompt, timeoutMs);
+      return callAnthropic(
+        config.apiKey,
+        config.model,
+        withSchemaReminder(prompt, schema),
+        timeoutMs
+      );
   }
+}
+
+/**
+ * Only Gemini gets `schema` passed as an actual enforced responseSchema —
+ * every other provider here only sees it if it's in the prompt text. Without
+ * this, a prompt that never spells out a field's exact key name in Chinese
+ * (e.g. "companyName") gets that key silently omitted by the model instead
+ * of filled with null, because the model has no other way to learn it's
+ * expected — caught via a real DeepSeek call dropping companyName/title.
+ */
+function withSchemaReminder(prompt: string, schema: GeminiSchema): string {
+  return `${prompt}\n\n严格按下面的字段结构输出一个 JSON 对象，必须包含全部列出的 key（不确定的字段填 null，不要省略 key，不要用 markdown 代码块包裹，不要有 JSON 之外的任何文字）：\n${JSON.stringify(schema)}`;
 }
 
 export { GeminiError };

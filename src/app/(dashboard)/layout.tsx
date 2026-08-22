@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/session";
 import { DashboardNav } from "@/components/dashboard/nav";
+import { AssistantWidget } from "@/components/assistant/assistant-widget";
 
 export default async function DashboardLayout({
   children,
@@ -22,6 +23,7 @@ export default async function DashboardLayout({
       <main className="min-w-0 flex-1 px-4 pb-16 pt-[calc(3.5rem+env(safe-area-inset-top)+1rem)] md:p-6 md:pb-16">
         {children}
       </main>
+      <AssistantWidget />
     </div>
   );
 }
