@@ -52,7 +52,12 @@ export function AddPositionDialog() {
     }
     setParsing(true);
     try {
-      const parsed = await parseJd({ text: jdText, url: form.jdUrl });
+      const res = await parseJd({ text: jdText, url: form.jdUrl });
+      if (!res.ok) {
+        toast.error(res.message);
+        return;
+      }
+      const parsed = res.data;
       // Replace rather than merge: this button means "fill from THIS jd", so a
       // field the model couldn't find must clear, not silently keep a value
       // left over from a previous parse in the same dialog.
@@ -71,8 +76,6 @@ export function AddPositionDialog() {
       }));
       setScoreReason(parsed.scoreReason);
       toast.success("已自动填充并打分，请检查一下再保存");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "解析失败，请手动填写");
     } finally {
       setParsing(false);
     }

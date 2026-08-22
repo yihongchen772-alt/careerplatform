@@ -90,9 +90,32 @@ export async function addStageUpdate(
 
 export async function deleteApplication(id: string) {
   const user = await requireUser();
-  await db.application.deleteMany({ where: { id, userId: user.id } });
+
+  const application = await db.application.findFirst({
+    where: { id, userId: user.id },
+    select: { id: true, positionId: true },
+  });
+  if (!application) return;
+
+  await db.$transaction(async (tx) => {
+    // Stage history and attachments cascade from the schema.
+    await tx.application.delete({ where: { id: application.id } });
+
+    // Without this the source position stays marked APPLIED with nothing behind
+    // it, and the pool hides 标记已投 in that state — leaving it unrecoverable.
+    if (application.positionId) {
+      await tx.position.updateMany({
+        where: { id: application.positionId, userId: user.id },
+        data: { status: "EVALUATING" },
+      });
+    }
+  });
+
   revalidatePath("/applications");
+  revalidatePath("/pool");
   revalidatePath("/dashboard");
+  revalidatePath("/insights");
+  revalidatePath("/interviews");
 }
 
 export async function updateApplicationOffer(

@@ -4,6 +4,11 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { generateStructured } from "@/lib/gemini";
+import {
+  toActionResult,
+  UserFacingError,
+  type ActionResult,
+} from "@/lib/action-result";
 
 const jdSchema = z.object({
   companyName: z.string().nullable(),
@@ -56,7 +61,7 @@ async function fetchPageText(url: string): Promise<string> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     html = await res.text();
   } catch {
-    throw new Error("无法访问该链接，请改用粘贴 JD 文字");
+    throw new UserFacingError("无法访问该链接，请改用粘贴 JD 文字");
   }
 
   const text = htmlToText(html);
@@ -64,7 +69,9 @@ async function fetchPageText(url: string): Promise<string> {
   // carries navigation chrome and nothing else. Say so instead of feeding the
   // model an empty page and returning confidently wrong fields.
   if (text.length < 200) {
-    throw new Error("该网站内容是动态加载的，抓不到正文，请改用粘贴 JD 文字");
+    throw new UserFacingError(
+      "该网站内容是动态加载的，抓不到正文，请改用粘贴 JD 文字"
+    );
   }
   return text.slice(0, 12000);
 }
@@ -156,7 +163,7 @@ ${jdText}
 
   const result = jdSchema.safeParse(raw);
   if (!result.success) {
-    throw new Error("解析结果格式异常，请手动填写");
+    throw new UserFacingError("解析结果格式异常，请手动填写");
   }
 
   return result.data;
@@ -165,7 +172,11 @@ ${jdText}
 export async function parseJd(input: {
   url?: string;
   text?: string;
-}): Promise<ParsedJd> {
+}): Promise<ActionResult<ParsedJd>> {
+  return toActionResult(() => run(input));
+}
+
+async function run(input: { url?: string; text?: string }): Promise<ParsedJd> {
   const sessionUser = await requireUser();
   // A valid session whose row is gone shouldn't 500 the parse — scoring just
   // falls back to "no preferences given", which the prompt handles explicitly.
@@ -186,12 +197,14 @@ export async function parseJd(input: {
 
   const pasted = input.text?.trim();
   if (pasted) {
-    if (pasted.length < 20) throw new Error("粘贴的内容太短，看不出岗位信息");
+    if (pasted.length < 20) {
+      throw new UserFacingError("粘贴的内容太短，看不出岗位信息");
+    }
     return extractFields(pasted.slice(0, 12000), user);
   }
 
   const url = input.url?.trim();
-  if (!url) throw new Error("请粘贴 JD 文字或填写链接");
+  if (!url) throw new UserFacingError("请粘贴 JD 文字或填写链接");
 
   return extractFields(await fetchPageText(url), user);
 }

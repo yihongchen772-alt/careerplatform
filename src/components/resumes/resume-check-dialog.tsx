@@ -43,13 +43,10 @@ export function ResumeCheckDialog({
 
   async function run() {
     setLoading(true);
-    try {
-      setResult(await checkResume(resumeVersionId));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "体检失败，请重试");
-    } finally {
-      setLoading(false);
-    }
+    const res = await checkResume(resumeVersionId);
+    setLoading(false);
+    if (res.ok) setResult(res.data);
+    else toast.error(res.message);
   }
 
   return (

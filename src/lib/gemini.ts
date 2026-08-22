@@ -1,3 +1,5 @@
+import { UserFacingError } from "@/lib/action-result";
+
 const ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent";
 
@@ -10,7 +12,7 @@ export type GeminiFilePart = {
 /** Minimal shape of the OpenAPI-ish schema Gemini expects for structured output. */
 export type GeminiSchema = Record<string, unknown>;
 
-export class GeminiError extends Error {}
+export class GeminiError extends UserFacingError {}
 
 /**
  * One structured-output call. Callers pass a response schema and get parsed JSON
@@ -68,7 +70,21 @@ export async function generateStructured({
   }
 
   if (!response.ok) {
-    throw new GeminiError("AI 请求失败，请稍后重试");
+    // Collapsing every status into one message hid a plain quota exhaustion as
+    // "请稍后重试" — advice that would never have worked, since the free tier
+    // resets daily rather than in minutes.
+    const detail = await response.text().catch(() => "");
+    console.error(`[gemini] ${response.status}`, detail.slice(0, 500));
+
+    if (response.status === 429) {
+      throw new GeminiError(
+        "今日 AI 免费额度已用完（Gemini 免费版每天 20 次），明天恢复"
+      );
+    }
+    if (response.status === 400 || response.status === 403) {
+      throw new GeminiError("AI 密钥无效或已过期，请联系管理员更换");
+    }
+    throw new GeminiError("AI 服务暂时不可用，请稍后重试");
   }
 
   const data = await response.json();

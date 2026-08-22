@@ -23,6 +23,9 @@ import {
 import { STAGE_BADGE_VARIANT, STAGE_LABELS } from "@/lib/stage-labels";
 import { daysSince, isTerminalStage } from "@/lib/reminders";
 import { downloadCsv, toCsv } from "@/lib/csv";
+import { toast } from "sonner";
+import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
+import { deleteApplication } from "@/lib/actions/applications";
 import type { ApplicationStage } from "@prisma/client";
 
 export type ApplicationRow = {
@@ -52,6 +55,15 @@ export function ApplicationsTable({
         : applications.filter((a) => a.currentStage === stageFilter),
     [applications, stageFilter]
   );
+
+  async function handleDelete(id: string) {
+    try {
+      await deleteApplication(id);
+      toast.success("已删除");
+    } catch {
+      toast.error("删除失败");
+    }
+  }
 
   function handleExport() {
     const csv = toCsv(filtered, [
@@ -111,35 +123,50 @@ export function ApplicationsTable({
           const stale = daysSince(new Date(app.currentStageDate));
           const terminal = isTerminalStage(app.currentStage);
           return (
-            <Link
-              key={app.id}
-              href={`/applications/${app.id}`}
-              className="block space-y-2 rounded-lg border p-3 transition-colors hover:bg-muted"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{app.company.name}</p>
-                  <p className="truncate text-sm text-muted-foreground">
-                    {app.title}
-                  </p>
+            // Delete sits outside the Link: nesting a button inside an anchor is
+            // invalid and the tap would race the navigation.
+            <div key={app.id} className="rounded-lg border p-3">
+              <Link
+                href={`/applications/${app.id}`}
+                className="block space-y-2 transition-opacity hover:opacity-80"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{app.company.name}</p>
+                    <p className="truncate text-sm text-muted-foreground">
+                      {app.title}
+                    </p>
+                  </div>
+                  <Badge variant={STAGE_BADGE_VARIANT[app.currentStage]}>
+                    {STAGE_LABELS[app.currentStage]}
+                  </Badge>
                 </div>
-                <Badge variant={STAGE_BADGE_VARIANT[app.currentStage]}>
-                  {STAGE_LABELS[app.currentStage]}
-                </Badge>
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span>{new Date(app.appliedDate).toLocaleDateString()} 投递</span>
-                <span
-                  className={
-                    !terminal && stale >= 14 ? "font-medium text-destructive" : ""
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span>{new Date(app.appliedDate).toLocaleDateString()} 投递</span>
+                  <span
+                    className={
+                      !terminal && stale >= 14 ? "font-medium text-destructive" : ""
+                    }
+                  >
+                    {stale} 天未更新
+                  </span>
+                  {app.source && <span>{app.source}</span>}
+                  {app.referrer && <span>内推：{app.referrer}</span>}
+                </div>
+              </Link>
+              <div className="mt-2 flex justify-end">
+                <ConfirmDeleteButton
+                  trigger={
+                    <Button size="sm" variant="ghost">
+                      删除
+                    </Button>
                   }
-                >
-                  {stale} 天未更新
-                </span>
-                {app.source && <span>{app.source}</span>}
-                {app.referrer && <span>内推：{app.referrer}</span>}
+                  title={`确定删除 ${app.company.name} · ${app.title} 吗？`}
+                  description="这条投递的进展记录和附件也会一并删除，无法撤销。"
+                  onConfirm={() => handleDelete(app.id)}
+                />
               </div>
-            </Link>
+            </div>
           );
         })}
         {filtered.length === 0 && (
@@ -159,6 +186,7 @@ export function ApplicationsTable({
             <TableHead>距上次更新</TableHead>
             <TableHead>渠道</TableHead>
             <TableHead>内推人</TableHead>
+            <TableHead className="text-right">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -192,12 +220,24 @@ export function ApplicationsTable({
                 </TableCell>
                 <TableCell>{app.source ?? "-"}</TableCell>
                 <TableCell>{app.referrer ?? "-"}</TableCell>
+                <TableCell className="text-right">
+                  <ConfirmDeleteButton
+                    trigger={
+                      <Button size="sm" variant="ghost">
+                        删除
+                      </Button>
+                    }
+                    title={`确定删除 ${app.company.name} · ${app.title} 吗？`}
+                    description="这条投递的进展记录和附件也会一并删除，无法撤销。"
+                    onConfirm={() => handleDelete(app.id)}
+                  />
+                </TableCell>
               </TableRow>
             );
           })}
           {filtered.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+              <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                 <div className="flex flex-col items-center gap-2">
                   <Send className="size-8 text-muted-foreground/50" />
                   <span>暂无投递记录</span>

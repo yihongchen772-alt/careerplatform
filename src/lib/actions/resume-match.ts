@@ -4,6 +4,11 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { fetchFileAsInlinePart, generateStructured } from "@/lib/gemini";
+import {
+  toActionResult,
+  UserFacingError,
+  type ActionResult,
+} from "@/lib/action-result";
 
 const matchSchema = z.object({
   matchScore: z.number().min(0).max(100),
@@ -28,14 +33,18 @@ const MAX_RESUMES = 5;
 
 export async function matchResumesToPosition(
   positionId: string
-): Promise<MatchResult> {
+): Promise<ActionResult<MatchResult>> {
+  return toActionResult(() => run(positionId));
+}
+
+async function run(positionId: string): Promise<MatchResult> {
   const user = await requireUser();
 
   const position = await db.position.findFirst({
     where: { id: positionId, userId: user.id },
     include: { company: true },
   });
-  if (!position) throw new Error("未找到该岗位");
+  if (!position) throw new UserFacingError("未找到该岗位");
 
   const resumes = await db.resumeVersion.findMany({
     where: { userId: user.id, fileUrl: { not: null } },
@@ -43,7 +52,7 @@ export async function matchResumesToPosition(
     take: MAX_RESUMES,
   });
   if (resumes.length === 0) {
-    throw new Error("还没有上传过简历文件，先去简历版本页上传一份");
+    throw new UserFacingError("还没有上传过简历文件，先去简历版本页上传一份");
   }
 
   const coarse = !position.jdText;
@@ -97,7 +106,7 @@ ${coarse ? "\n注意：这个岗位没有提供 JD 正文，只能依据岗位�
       });
 
       const parsed = matchSchema.safeParse(raw);
-      if (!parsed.success) throw new Error("AI 返回格式异常，请重试");
+      if (!parsed.success) throw new UserFacingError("AI 返回格式异常，请重试");
 
       return {
         ...parsed.data,

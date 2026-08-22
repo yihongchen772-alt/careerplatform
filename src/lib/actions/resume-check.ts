@@ -4,17 +4,30 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { fetchFileAsInlinePart, generateStructured } from "@/lib/gemini";
+import {
+  toActionResult,
+  UserFacingError,
+  type ActionResult,
+} from "@/lib/action-result";
 import { resumeCheckSchema, type ResumeCheck } from "@/lib/validation";
 
-export async function checkResume(resumeVersionId: string): Promise<ResumeCheck> {
+export async function checkResume(
+  resumeVersionId: string
+): Promise<ActionResult<ResumeCheck>> {
+  return toActionResult(() => run(resumeVersionId));
+}
+
+async function run(resumeVersionId: string): Promise<ResumeCheck> {
   const user = await requireUser();
 
   const resume = await db.resumeVersion.findFirst({
     where: { id: resumeVersionId, userId: user.id },
   });
-  if (!resume) throw new Error("未找到该简历版本");
+  if (!resume) throw new UserFacingError("未找到该简历版本");
   if (!resume.fileUrl) {
-    throw new Error("这个版本还没有上传简历文件，先上传 PDF 或图片再体检");
+    throw new UserFacingError(
+      "这个版本还没有上传简历文件，先上传 PDF 或图片再体检"
+    );
   }
 
   const file = await fetchFileAsInlinePart(resume.fileUrl);
@@ -78,7 +91,7 @@ export async function checkResume(resumeVersionId: string): Promise<ResumeCheck>
   });
 
   const parsed = resumeCheckSchema.safeParse(raw);
-  if (!parsed.success) throw new Error("AI 返回格式异常，请重试");
+  if (!parsed.success) throw new UserFacingError("AI 返回格式异常，请重试");
 
   await db.resumeVersion.update({
     where: { id: resume.id },

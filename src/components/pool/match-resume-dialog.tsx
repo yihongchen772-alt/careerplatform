@@ -33,9 +33,9 @@ export function MatchResumeDialog({
   async function run() {
     setLoading(true);
     try {
-      setResult(await matchResumesToPosition(positionId));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "匹配失败，请重试");
+      const res = await matchResumesToPosition(positionId);
+      if (res.ok) setResult(res.data);
+      else toast.error(res.message);
     } finally {
       setLoading(false);
     }
