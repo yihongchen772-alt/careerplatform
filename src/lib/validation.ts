@@ -206,6 +206,20 @@ export const interviewFeedbackSchema = z.object({
 
 export type InterviewFeedback = z.infer<typeof interviewFeedbackSchema>;
 
+export const careerFitAnalysisSchema = z.object({
+  summary: z.string(),
+  recommendedDirections: z.array(
+    z.object({
+      direction: z.string(),
+      reason: z.string(),
+    })
+  ),
+  strengths: z.array(z.string()),
+  cautions: z.array(z.string()),
+});
+
+export type CareerFitAnalysis = z.infer<typeof careerFitAnalysisSchema>;
+
 export const companyDirectoryEntrySchema = z.object({
   name: z.string().min(1, "公司名称必填"),
   careerUrl: z.string().url("请输入合法的链接"),

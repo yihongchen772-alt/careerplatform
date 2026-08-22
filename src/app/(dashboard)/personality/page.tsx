@@ -4,14 +4,19 @@ import { requireUser } from "@/lib/session";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PERSONALITY_TEST_LIST } from "@/lib/personality-tests";
 import { PersonalityHistoryList } from "@/components/personality/history-list";
+import { CareerFitCard } from "@/components/personality/career-fit-card";
+import type { CareerFitAnalysis } from "@/lib/validation";
 
 export default async function PersonalityPage() {
   const user = await requireUser();
 
-  const results = await db.personalityTestResult.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-  });
+  const [results, careerFit] = await Promise.all([
+    db.personalityTestResult.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+    }),
+    db.careerFitAnalysis.findUnique({ where: { userId: user.id } }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -41,6 +46,11 @@ export default async function PersonalityPage() {
           </Card>
         ))}
       </div>
+
+      <CareerFitCard
+        hasAnyResult={results.length > 0}
+        initialResult={careerFit ? (careerFit.content as CareerFitAnalysis) : null}
+      />
 
       {results.length > 0 && (
         <Card>
