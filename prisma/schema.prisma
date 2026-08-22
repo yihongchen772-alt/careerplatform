@@ -29,7 +29,6 @@ model User {
   positions      Position[]
   applications   Application[]
   resumeVersions ResumeVersion[]
-  reminders      Reminder[]
   addedCompanies Company[]
   attachments    Attachment[]
 }
@@ -157,7 +156,6 @@ model Application {
   company       Company         @relation(fields: [companyId], references: [id])
   resumeVersion ResumeVersion?  @relation(fields: [resumeVersionId], references: [id])
   stageHistory  StageHistory[]
-  reminders     Reminder[]
   attachments   Attachment[]
 
   @@index([userId])
@@ -212,18 +210,3 @@ model ResumeVersion {
   @@index([userId])
 }
 
-model Reminder {
-  id            String    @id @default(cuid())
-  userId        String
-  applicationId String?
-  dueDate       DateTime
-  type          String
-  note          String?
-  done          Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  application Application? @relation(fields: [applicationId], references: [id])
-
-  @@index([userId])
-}

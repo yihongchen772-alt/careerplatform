@@ -4,16 +4,13 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  findStaleApplications,
-  findUpcomingPositionDeadlines,
-} from "@/lib/reminders";
+import { buildTodos, type Todo } from "@/lib/todos";
 import { STAGE_LABELS, STAGE_ORDER } from "@/lib/stage-labels";
 
 export default async function DashboardPage() {
   const user = await requireUser();
 
-  const [applications, positions] = await Promise.all([
+  const [applications, positions, stageHistories] = await Promise.all([
     db.application.findMany({
       where: { userId: user.id },
       include: { company: true },
@@ -22,6 +19,10 @@ export default async function DashboardPage() {
     db.position.findMany({
       where: { userId: user.id, status: { not: "APPLIED" } },
       include: { company: true },
+    }),
+    db.stageHistory.findMany({
+      where: { application: { userId: user.id }, nextDeadline: { not: null } },
+      include: { application: { include: { company: true } } },
     }),
   ]);
 
@@ -36,12 +37,13 @@ export default async function DashboardPage() {
   }));
   const maxCount = Math.max(1, ...stageCounts.map((s) => s.count));
 
-  const stale = findStaleApplications(applications);
-  const upcoming = findUpcomingPositionDeadlines(positions);
+  const todos = buildTodos(applications, positions, stageHistories);
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">总览</h1>
+
+      <TodoCard todos={todos} />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard label="总投递数" value={total} icon={Send} />
@@ -72,54 +74,61 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>停滞投递（超 14 天无更新）</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {stale.length === 0 && (
-              <p className="text-sm text-muted-foreground">暂无需要跟进的投递</p>
-            )}
-            {stale.map((app) => (
-              <Link
-                key={app.id}
-                href={`/applications/${app.id}`}
-                className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-muted"
-              >
-                <span>
-                  {app.companyName} · {app.title}
-                </span>
-                <Badge variant="destructive">{app.daysStale} 天未更新</Badge>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>即将截止的候选岗位</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {upcoming.length === 0 && (
-              <p className="text-sm text-muted-foreground">暂无 5 天内截止的岗位</p>
-            )}
-            {upcoming.map((p) => (
-              <Link
-                key={p.id}
-                href="/pool"
-                className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-muted"
-              >
-                <span>
-                  {p.companyName} · {p.title}
-                </span>
-                <Badge variant="secondary">{p.daysLeft} 天后截止</Badge>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
     </div>
+  );
+}
+
+const URGENCY_STYLE: Record<Todo["urgency"], { badge: string; label: string }> = {
+  overdue: { badge: "destructive", label: "已逾期" },
+  urgent: { badge: "destructive", label: "很急" },
+  soon: { badge: "secondary", label: "临近" },
+};
+
+function TodoCard({ todos }: { todos: Todo[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>待办</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {todos.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            暂时没有要处理的事，保持住
+          </p>
+        ) : (
+          <>
+            {todos.map((todo) => {
+              const style = URGENCY_STYLE[todo.urgency];
+              return (
+                <Link
+                  key={todo.id}
+                  href={todo.href}
+                  className="flex flex-col gap-1 rounded-md border p-2 text-sm hover:bg-muted sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{todo.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {todo.sublabel}
+                    </p>
+                  </div>
+                  <Badge
+                    variant={
+                      style.badge as "destructive" | "secondary"
+                    }
+                    className="self-start sm:self-auto"
+                  >
+                    {style.label}
+                  </Badge>
+                </Link>
+              );
+            })}
+            <p className="pt-1 text-xs text-muted-foreground">
+              处理完对应记录（更新阶段、标记已投）后，这里会自动消失
+            </p>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

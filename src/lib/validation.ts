@@ -123,10 +123,3 @@ export const companyDirectoryEntrySchema = z.object({
   sector: z.enum(companyDirectorySectors).optional(),
   industry: z.string().optional(),
 });
-
-export const reminderSchema = z.object({
-  applicationId: z.string().optional().nullable(),
-  dueDate: z.coerce.date(),
-  type: z.string().min(1),
-  note: z.string().optional(),
-});

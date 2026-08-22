@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
+  BookOpen,
   Building2,
   CalendarDays,
   FileText,
@@ -15,6 +16,7 @@ import {
   Search,
   Send,
   Settings,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,7 +34,9 @@ const groups: { label: string; links: NavLink[] }[] = [
     links: [
       { href: "/pool", label: "候选岗位池", icon: ListChecks },
       { href: "/applications", label: "投递记录", icon: Send },
+      { href: "/interviews", label: "面经库", icon: BookOpen },
       { href: "/calendar", label: "日历视图", icon: CalendarDays },
+      { href: "/insights", label: "转化率", icon: TrendingUp },
       { href: "/compare", label: "Offer 对比", icon: Scale },
     ],
   },
