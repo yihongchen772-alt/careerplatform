@@ -7,7 +7,12 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  /* Was `var(--font-sans)` — self-referential, so the loaded Geist font was
+     never actually applied and every page silently fell back to the browser
+     default. -apple-system/PingFang SC give the CJK text the same system-UI
+     feel Geist gives the Latin/numeric text. */
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont,
+    "PingFang SC", "Helvetica Neue", "Segoe UI", "Microsoft YaHei", sans-serif;
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -49,7 +54,11 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
+  /* Content sits on a soft off-white (macOS-style), cards are pure white —
+     that split is what makes a card read as a floating panel instead of a
+     border-only box. Previously background and card were both pure white,
+     so the only thing separating a card from the page was a 1px ring. */
+  --background: oklch(0.976 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -57,29 +66,29 @@
   --popover-foreground: oklch(0.145 0 0);
   --primary: #4f46e5;
   --primary-foreground: #ffffff;
-  --secondary: oklch(0.97 0 0);
+  --secondary: oklch(0.955 0 0);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted: oklch(0.955 0 0);
+  --muted-foreground: oklch(0.53 0 0);
   --accent: #eef2ff;
   --accent-foreground: #4338ca;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  --border: oklch(0.906 0 0);
+  --input: oklch(0.906 0 0);
   --ring: #6366f1;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.976 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.94 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-border: oklch(0.906 0 0);
   --sidebar-ring: oklch(0.708 0 0);
 }
 
@@ -126,5 +135,10 @@
   }
   html {
     @apply font-sans;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply tracking-tight;
   }
 }

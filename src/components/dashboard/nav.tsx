@@ -78,9 +78,9 @@ function NavItem({
       href={link.href}
       onClick={onNavigate}
       className={cn(
-        "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+        "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
         active
-          ? "bg-primary text-primary-foreground"
+          ? "bg-primary/10 text-primary"
           : "text-muted-foreground hover:bg-muted hover:text-foreground"
       )}
     >
@@ -186,7 +186,7 @@ export function DashboardNav({ userLabel }: { userLabel: string }) {
       {/* Mobile top bar */}
       {/* h-14 is the bar itself; the notch inset is added as padding on top, so
           the real height is 3.5rem + inset — layout's pt must match. */}
-      <header className="fixed inset-x-0 top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-2 border-b bg-card px-3 pt-[env(safe-area-inset-top)] md:hidden">
+      <header className="fixed inset-x-0 top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-2 border-b bg-card/80 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
         <Button
           variant="ghost"
           size="icon"
