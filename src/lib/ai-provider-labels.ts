@@ -17,3 +17,33 @@ export const AI_PROVIDER_OPTIONS: {
   { id: "kimi", label: "Kimi（月之暗面）", defaultModel: "moonshot-v1-8k", keyHelp: "在 platform.moonshot.cn 生成" },
   { id: "anthropic", label: "Anthropic Claude", defaultModel: "claude-sonnet-4-6", keyHelp: "在 console.anthropic.com 生成" },
 ];
+
+/**
+ * Seed list for the model dropdown — deliberately short and NOT treated as
+ * the truth. Every provider ships new model names faster than a hardcoded
+ * list can track, and a stale hardcoded name is worse than no name at all
+ * (it looks authoritative and then 404s at call time). The authoritative
+ * list comes from listProviderModels() in src/lib/actions/ai-models.ts,
+ * which asks the provider's own /models endpoint with the user's key and
+ * therefore returns exactly the models that key can actually call. These
+ * seeds only exist so the dropdown isn't empty before that button is
+ * pressed, and so an offline/blocked network still leaves something usable.
+ */
+export const SEED_MODELS: Record<AiProviderId, readonly string[]> = {
+  gemini: [
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+  ],
+  openai: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"],
+  deepseek: ["deepseek-chat", "deepseek-reasoner"],
+  kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+  anthropic: [
+    "claude-haiku-4-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-5",
+    "claude-opus-4-6",
+    "claude-opus-5",
+  ],
+};

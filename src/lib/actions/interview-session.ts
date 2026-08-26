@@ -21,6 +21,8 @@ export type InterviewMessageDTO = {
   id: string;
   role: InterviewMessageRole;
   content: string;
+  /** Set only on spoken answers — how it sounded, not what was said. */
+  deliveryNote?: string | null;
 };
 
 /** Real back-and-forth chat — several AI calls per session, so it needs the
@@ -120,12 +122,14 @@ ${resumeText}
 
 export async function sendInterviewMessage(
   sessionId: string,
-  content: string
+  content: string,
+  /** Passed through from the transcription step when the answer was spoken. */
+  deliveryNote?: string | null
 ): Promise<ActionResult<{ messages: InterviewMessageDTO[]; ended: boolean }>> {
-  return toActionResult(() => runSend(sessionId, content));
+  return toActionResult(() => runSend(sessionId, content, deliveryNote));
 }
 
-async function runSend(sessionId: string, content: string) {
+async function runSend(sessionId: string, content: string, deliveryNote?: string | null) {
   const user = await requireUser();
   const data = sendInterviewMessageSchema.parse({ content });
 
@@ -139,7 +143,7 @@ async function runSend(sessionId: string, content: string) {
   const config = await requireOwnAiConfig(user.id);
 
   await db.interviewMessage.create({
-    data: { sessionId, role: "USER", content: data.content },
+    data: { sessionId, role: "USER", content: data.content, deliveryNote: deliveryNote || null },
   });
 
   const { resumeText, jobDescription } = await buildContext(
@@ -221,9 +225,18 @@ async function runEnd(sessionId: string) {
     session.targetRole ?? undefined
   );
 
+  // Spoken answers carry a delivery note the transcript can't show. Folding
+  // it in here is the whole reason it's stored: a written-out answer can read
+  // fine while the actual delivery was full of "呃" and long pauses.
   const transcript = session.messages
-    .map((m) => `${m.role === "ASSISTANT" ? "面试官" : "候选人"}：${m.content}`)
+    .map((m) => {
+      const who = m.role === "ASSISTANT" ? "面试官" : "候选人";
+      const delivery = m.deliveryNote ? `\n  （口头表达：${m.deliveryNote}）` : "";
+      return `${who}：${m.content}${delivery}`;
+    })
     .join("\n");
+
+  const spokenCount = session.messages.filter((m) => m.deliveryNote).length;
 
   const prompt = `以下是一场模拟面试的完整对话记录，请给出面试后的整体反馈。
 
@@ -241,6 +254,13 @@ ${transcript}
 - strengths：候选人表现好的地方，要具体（引用对话里的实际回答）
 - improvements：需要改进的地方，要具体、可执行
 - summary：一两句总体评价
+${
+    spokenCount > 0
+      ? "\n这场面试里有 " +
+        spokenCount +
+        " 个回答是口头作答的，对话记录里带了「口头表达」的观察。评价时把表达方式也算进去（语速、流利度、口头禅、停顿），并在 improvements 里给出可练的具体建议——这是打字面试看不出来的部分，别忽略。"
+      : ""
+  }
 
 全部用中文。`;
 
@@ -273,6 +293,63 @@ ${transcript}
   return parsed.data;
 }
 
-function toDTO(m: { id: string; role: InterviewMessageRole; content: string }): InterviewMessageDTO {
-  return { id: m.id, role: m.role, content: m.content };
+function toDTO(m: {
+  id: string;
+  role: InterviewMessageRole;
+  content: string;
+  deliveryNote?: string | null;
+}): InterviewMessageDTO {
+  return { id: m.id, role: m.role, content: m.content, deliveryNote: m.deliveryNote ?? null };
+}
+
+/**
+ * Deletes a whole mock-interview session. Sessions accumulate fast — a few
+ * abandoned after two questions, a few started against the wrong resume —
+ * and with no way to remove them the history list becomes unusable as a
+ * record of the ones that mattered. Messages go with it via the cascade on
+ * InterviewMessage.sessionId.
+ */
+export async function deleteInterviewSession(
+  sessionId: string
+): Promise<ActionResult<null>> {
+  return toActionResult(async () => {
+    const user = await requireUser();
+    const deleted = await db.interviewSession.deleteMany({
+      where: { id: sessionId, userId: user.id },
+    });
+    if (deleted.count === 0) throw new UserFacingError("未找到该面试记录");
+    revalidatePath("/mock-interview");
+    return null;
+  });
+}
+
+/**
+ * Renames a session. The auto-generated label is the position or target
+ * role, which stops being distinguishable the third time you practise for
+ * the same job — "字节三面重练" is what makes the list navigable.
+ */
+export async function renameInterviewSession(
+  sessionId: string,
+  targetRole: string
+): Promise<ActionResult<null>> {
+  return toActionResult(async () => {
+    const user = await requireUser();
+    const name = targetRole.trim();
+    if (!name) throw new UserFacingError("名字不能为空");
+
+    const session = await db.interviewSession.findFirst({
+      where: { id: sessionId, userId: user.id },
+    });
+    if (!session) throw new UserFacingError("未找到该面试记录");
+
+    // Clearing positionId as well, otherwise the position's label keeps
+    // winning over the name the user just typed when the list renders.
+    await db.interviewSession.update({
+      where: { id: sessionId },
+      data: { targetRole: name, positionId: null },
+    });
+    revalidatePath("/mock-interview");
+    revalidatePath(`/mock-interview/${sessionId}`);
+    return null;
+  });
 }

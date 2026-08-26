@@ -46,6 +46,7 @@ model User {
   personalityTestResults PersonalityTestResult[]
   careerFitAnalysis      CareerFitAnalysis?
   aiKeys                 AiKey[]
+  questionBanks          QuestionBank[]
 }
 
 model AiKey {
@@ -155,6 +156,7 @@ model Position {
 enum ApplicationStage {
   APPLIED
   SCREENING
+  ASSESSMENT
   OA
   INTERVIEW_1
   INTERVIEW_2
@@ -181,6 +183,17 @@ model Application {
   salaryMin        Int?
   salaryMax        Int?
   offerNote        String?          @db.Text
+  /// Offer comparison beyond the headline monthly salary. Total annual
+  /// package in 万元 (base + bonus + stock) since offers here are quoted
+  /// that way; monthly salary stays in salaryMin/Max as K.
+  offerAnnualTotal Int?
+  /// One-way commute in minutes.
+  commuteMinutes   Int?
+  /// Free text rather than an enum — "大小周", "弹性但晚上要盯线上" and
+  /// "旺季前一个月封闭" are all real answers no fixed list covers.
+  overtimeNote     String?
+  /// Growth prospects: team, mentor, tech stack, promotion path.
+  growthNote       String?
   createdAt        DateTime         @default(now())
 
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -218,6 +231,10 @@ model Attachment {
   stageHistoryId String?
   url            String
   name           String
+  /// Shelf in the 资料库 (证书 / 作品集 / 笔试资料 / 面试资料 / 其他). Null
+  /// on attachments uploaded onto an application, where the application
+  /// itself is the context.
+  category       String?
   createdAt      DateTime @default(now())
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -350,11 +367,34 @@ model InterviewMessage {
   sessionId String
   role      InterviewMessageRole
   content   String               @db.Text
+  /// Only set on spoken answers: what the audio reveals that a transcript
+  /// can't — pace, filler words, hesitation.
+  deliveryNote String?
   createdAt DateTime             @default(now())
 
   session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
+}
+
+/// A set of interview questions that can live on its own, separate from
+/// InterviewQA (which is generated for one specific application and is
+/// deleted with it). Banks are what people actually trade with each other in
+/// 秋招 group chats, so they need to be importable and exportable.
+model QuestionBank {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  source    String?
+  /// QuestionBankItem[] — see src/lib/question-bank-shared.ts. Stored as
+  /// JSON rather than a table because a bank is always read/written whole.
+  questions Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 enum PersonalityTestType {
