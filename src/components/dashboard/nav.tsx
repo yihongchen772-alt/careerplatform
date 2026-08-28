@@ -21,6 +21,7 @@ import {
   Send,
   Settings,
   TrendingUp,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,7 @@ const groups: { label: string; links: NavLink[] }[] = [
     links: [
       { href: "/pool", label: "候选岗位池", icon: ListChecks },
       { href: "/applications", label: "投递记录", icon: Send },
+      { href: "/contacts", label: "联系人", icon: UsersRound },
       { href: "/mock-interview", label: "AI 模拟面试", icon: MessageSquare },
       { href: "/interviews", label: "面经库", icon: BookOpen },
       { href: "/question-banks", label: "题库", icon: Library },

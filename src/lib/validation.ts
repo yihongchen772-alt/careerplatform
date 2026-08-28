@@ -121,6 +121,10 @@ export const stageUpdateSchema = z.object({
   interviewFormat: z.string().optional(),
   interviewer: z.string().optional(),
   nextDeadline: z.coerce.date().optional().nullable(),
+  /// End of a window, when the next step is a range ("8/26-8/30 期间任意
+  /// 时间可测") rather than a single moment — 笔试/测评链接routinely give a
+  /// window, not a fixed slot the way an interview appointment does.
+  nextDeadlineEnd: z.coerce.date().optional().nullable(),
 });
 
 export const resumeVersionSchema = z.object({
@@ -191,6 +195,20 @@ export const personalTaskSchema = z.object({
   title: z.string().min(1, "标题必填"),
   note: z.string().optional(),
   dueDate: z.coerce.date().optional().nullable(),
+  /// Same window idea as StageHistory.nextDeadlineEnd — a self-authored
+  /// task can equally be "笔试窗口 8/26-8/30" rather than a single moment.
+  dueDateEnd: z.coerce.date().optional().nullable(),
+  positionId: z.string().optional().nullable(),
+  applicationId: z.string().optional().nullable(),
+});
+
+export const contactSchema = z.object({
+  name: z.string().min(1, "姓名必填"),
+  role: z.string().optional(),
+  companyName: z.string().optional(),
+  contactInfo: z.string().optional(),
+  note: z.string().optional(),
+  nextFollowUpAt: z.coerce.date().optional().nullable(),
   positionId: z.string().optional().nullable(),
   applicationId: z.string().optional().nullable(),
 });
