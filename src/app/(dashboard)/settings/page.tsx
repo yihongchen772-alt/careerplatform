@@ -5,6 +5,7 @@ import { ProfileForm } from "@/components/settings/profile-form";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
 import { AppearanceForm } from "@/components/settings/appearance-form";
+import { ExportDataButton } from "@/components/settings/export-data-button";
 import { getAiKeysOverview } from "@/lib/actions/ai-keys";
 
 export default async function SettingsPage() {
@@ -33,6 +34,7 @@ export default async function SettingsPage() {
         <ChangePasswordForm />
         <AppearanceForm />
         <AiSettingsForm keys={aiKeys} />
+        <ExportDataButton />
       </div>
     </div>
   );
