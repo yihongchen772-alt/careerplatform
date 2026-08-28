@@ -47,6 +47,9 @@ model User {
   careerFitAnalysis      CareerFitAnalysis?
   aiKeys                 AiKey[]
   questionBanks          QuestionBank[]
+  jobLeads               JobLead[]
+  examSessions           ExamSession[]
+  contacts               Contact[]
 }
 
 model AiKey {
@@ -55,6 +58,12 @@ model AiKey {
   provider        String
   apiKeyEncrypted String   @db.Text
   model           String?
+  /// Only meaningful for OpenAI-compatible providers (openai/deepseek/kimi/
+  /// qwen) — overrides that provider's default base URL, for workspace-
+  /// specific or self-hosted OpenAI-compatible endpoints (e.g. Alibaba
+  /// Cloud 百炼's per-workspace MaaS gateway, which isn't the same for
+  /// every account).
+  baseUrl         String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -125,12 +134,46 @@ enum PositionStatus {
   DROPPED
 }
 
+/// A raw row from an imported 秋招信息表 — the wide, messy, mostly-irrelevant
+/// list that circulates in group chats. Deliberately NOT a Position: the
+/// candidate pool is the small curated set the user actually intends to
+/// apply to, and dumping hundreds of leads into it would bury that. Leads
+/// live here until the user promotes one, at which point promotedPositionId
+/// is set so the library can show it's already been taken.
+model JobLead {
+  id          String    @id @default(cuid())
+  userId      String
+  companyName String
+  title       String
+  track       String?
+  department  String?
+  location    String?
+  salaryMin   Int?
+  salaryMax   Int?
+  deadline    DateTime?
+  source      String?
+  jdUrl       String?
+  note        String?   @db.Text
+  /// 0-100 from the AI resume match; null until the user runs a match.
+  fitScore    Int?
+  fitReason   String?   @db.Text
+  /// Filename of the sheet this came from, so a bad import can be found again.
+  batch       String?
+  promotedPositionId String?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 model Position {
   id             String         @id @default(cuid())
   userId         String
   companyId      String
   title          String
   track          String?
+  department     String?
   location       String?
   salaryMin      Int?
   salaryMax      Int?
@@ -149,6 +192,7 @@ model Position {
   interviewPrep InterviewPrep?
   personalTasks PersonalTask[]
   interviewSessions InterviewSession[]
+  contacts      Contact[]
 
   @@index([userId])
 }
@@ -204,6 +248,7 @@ model Application {
   attachments   Attachment[]
   interviewQA   InterviewQA?
   personalTasks PersonalTask[]
+  contacts      Contact[]
 
   @@index([userId])
 }
@@ -217,6 +262,12 @@ model StageHistory {
   interviewFormat String?
   interviewer     String?
   nextDeadline    DateTime?
+  /// End of a window when the next step isn't a single fixed moment — 笔试/
+  /// 测评 links routinely say "8月26日-8月30日期间任意时间可测" rather than
+  /// giving one deadline. Null means nextDeadline is a single point in time
+  /// (an interview slot, a fixed deadline); set means [nextDeadline,
+  /// nextDeadlineEnd] is the window.
+  nextDeadlineEnd DateTime?
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   attachments Attachment[]
@@ -314,10 +365,46 @@ model PersonalTask {
   title         String
   note          String?   @db.Text
   dueDate       DateTime?
+  /// End of a window, same idea as StageHistory.nextDeadlineEnd — a
+  /// self-authored task can equally be "笔试窗口 8/26-8/30" rather than a
+  /// single due moment.
+  dueDateEnd    DateTime?
   done          Boolean   @default(false)
   positionId    String?
   applicationId String?
   createdAt     DateTime  @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  position    Position?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  application Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+/// A recruiter, referrer, or interviewer worth keeping track of — who they
+/// are, how to reach them, and when to follow up. Distinct from
+/// Application.referrer (a free-text name on one investment record): a
+/// contact is a person, not an attribute of one application, and the same
+/// person often spans multiple roles/rounds at the same company or shows up
+/// again at a different one next season.
+model Contact {
+  id              String    @id @default(cuid())
+  userId          String
+  name            String
+  /// Free text rather than an enum — "HR"/"内推人"/"技术面试官"/"猎头" and
+  /// combinations of those don't fit a fixed list.
+  role            String?
+  companyName     String?
+  /// Free text: 微信号/邮箱/电话, whatever the user actually has for them —
+  /// no reason to force three separate fields when most contacts only have
+  /// one channel worth recording.
+  contactInfo     String?
+  note            String?   @db.Text
+  lastContactedAt DateTime?
+  nextFollowUpAt  DateTime?
+  positionId      String?
+  applicationId   String?
+  createdAt       DateTime  @default(now())
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   position    Position?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
@@ -391,6 +478,45 @@ model QuestionBank {
   questions Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum ExamSessionStatus {
+  ACTIVE
+  ENDED
+}
+
+/// A timed practice run through a subset of a QuestionBank. Deliberately
+/// snapshots the questions (and later, answers/grading) as JSON rather than
+/// referencing QuestionBank.questions live — a bank gets edited over time
+/// (AI re-classifies modules, answers get filled in), and a past exam's
+/// content must not silently change out from under its own score history.
+model ExamSession {
+  id        String            @id @default(cuid())
+  userId    String
+  /// The source bank, kept only so "重考一次" can re-pull from the same
+  /// pool — never dereferenced to render the exam itself.
+  bankId    String?
+  bankName  String
+  /// Modules selected when starting, or null if the whole bank was used.
+  modules   Json?
+  /// QuestionBankItem[] snapshot at exam start (question/module/category/
+  /// referenceAnswer/tips) — see src/lib/question-bank-shared.ts.
+  questions Json
+  /// Parallel array to `questions`, filled in on submit:
+  /// {answer, score, feedback}[]. Null until the exam is submitted.
+  answers      Json?
+  status       ExamSessionStatus @default(ACTIVE)
+  overallScore Int?
+  summary      String?           @db.Text
+  /// Minutes the user was given — advisory (client auto-submits at zero),
+  /// not enforced server-side.
+  durationMinutes Int
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -24,7 +24,7 @@ export function ExportDataButton() {
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
       const a = document.createElement("a");
       a.href = url;
-      a.download = `求职罗盘导出-${stamp}.json`;
+      a.download = `求职罗盘备份-${stamp}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -42,7 +42,8 @@ export function ExportDataButton() {
       <CardHeader>
         <CardTitle>导出我的数据</CardTitle>
         <CardDescription>
-          把你在这里的岗位、投递记录、简历版本、日程、题库、模拟面试等全部数据打包成一个 JSON 文件下载下来，自己留一份备份。
+          把你在这里的岗位、投递记录、简历版本、日程、联系人、题库、模拟面试等全部数据打包成一个 JSON
+          文件下载下来，自己留一份备份。这个文件也能直接导入桌面版（本地单机版）的"恢复备份"，把网页版的数据搬到桌面版上用。
         </CardDescription>
       </CardHeader>
       <CardContent>
