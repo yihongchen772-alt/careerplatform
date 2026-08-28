@@ -9,6 +9,7 @@ import {
   Brain,
   Building2,
   CalendarDays,
+  ClipboardList,
   FileText,
   FolderOpen,
   LayoutDashboard,
@@ -38,6 +39,7 @@ const groups: { label: string; links: NavLink[] }[] = [
   {
     label: "求职工具",
     links: [
+      { href: "/leads", label: "秋招信息库", icon: ClipboardList },
       { href: "/pool", label: "候选岗位池", icon: ListChecks },
       { href: "/applications", label: "投递记录", icon: Send },
       { href: "/contacts", label: "联系人", icon: UsersRound },
