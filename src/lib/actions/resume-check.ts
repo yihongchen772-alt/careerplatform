@@ -31,11 +31,9 @@ async function run(resumeVersionId: string): Promise<ResumeCheck> {
     );
   }
 
-  // Prefer the user's own Gemini key when they've configured one; falls
-  // back to the shared server quota (via generateStructured's own
-  // GEMINI_API_KEY fallback) otherwise — this app has a shared quota, so
-  // unlike the local single-user build, missing a personal key here is not
-  // a hard error.
+  // Reading a resume file requires Gemini specifically, regardless of the
+  // user's chosen default provider — generateStructured throws a clear
+  // error below if this user hasn't configured a Gemini key.
   const geminiKey = await getUserAiKey(user.id, "gemini");
 
   const file = await fetchFileAsInlinePart(resume.fileUrl);

@@ -56,9 +56,8 @@ async function run(positionId: string): Promise<MatchResult> {
     throw new UserFacingError("还没有上传过简历文件，先去简历版本页上传一份");
   }
 
-  // Prefer the user's own Gemini key when configured; falls back to the
-  // shared server quota otherwise (this app has one, unlike the local
-  // single-user build).
+  // Reading resume files requires Gemini specifically — generateStructured
+  // throws a clear error below if this user hasn't configured a Gemini key.
   const geminiKey = await getUserAiKey(user.id, "gemini");
 
   const coarse = !position.jdText;

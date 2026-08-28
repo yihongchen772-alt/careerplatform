@@ -41,11 +41,10 @@ export function AiSettingsForm({ keys }: { keys: AiKeyOverview[] }) {
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
           {hasAnyKey
-            ? "可以同时配置多个服务商的 Key，切换默认服务商供面试攻略、模拟面试等文字类功能使用。没配置默认 Key 的功能会用平台共享额度（有每日上限）。"
-            : "尚未配置——AI 功能默认使用平台共享额度（有每日上限）。填自己的 Key 后不受共享额度限制，且可以同时配置多个服务商。"}
-          简历体检、岗位匹配、JD 解析需要直接读取 PDF/图片文件，这三个功能固定用下面的
-          Gemini Key（其他服务商做不到读文件）；不配置的话这三个功能会退回平台共享的
-          Gemini 额度，跟&ldquo;默认&rdquo;选择无关。
+            ? "可以同时配置多个服务商的 Key，切换默认服务商供面试攻略、模拟面试等文字类功能使用。"
+            : "AI 功能都需要你自己的 API Key 才能用，没有共享额度。"}
+          简历体检、岗位匹配需要直接读取 PDF/图片文件，这两个功能固定用下面的
+          Gemini Key（其他服务商做不到读文件），跟上面的&ldquo;默认&rdquo;选择无关，不配置就用不了这两个功能。
         </p>
 
         <div className="space-y-2">

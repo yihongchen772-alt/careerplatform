@@ -38,13 +38,13 @@ export async function generateStructured({
   schema: GeminiSchema;
   thinkingBudget: number;
   timeoutMs?: number;
-  /** BYOK: caller's own Gemini key/model, in preference to the shared one. */
+  /** BYOK only — every caller must supply the user's own Gemini key. */
   apiKey?: string;
   model?: string;
 }): Promise<unknown> {
-  const apiKey = apiKeyOverride ?? process.env.GEMINI_API_KEY;
+  const apiKey = apiKeyOverride;
   if (!apiKey) {
-    throw new GeminiError("尚未配置 Gemini API Key，联系管理员配置后再试");
+    throw new GeminiError("请先在「账号设置」里配置你自己的 Gemini API Key 才能使用 AI 功能");
   }
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelOverride ?? MODEL}:generateContent`;
 

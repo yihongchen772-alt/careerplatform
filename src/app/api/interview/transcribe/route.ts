@@ -38,10 +38,9 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     // Gemini specifically, not the user's default provider: of the
     // providers here it's the only one whose API takes raw audio in the
-    // same generateContent call. Falls back to the shared server key (same
-    // fallback generateStructured() already does for text) when the user
-    // hasn't configured their own — this app has a shared quota, unlike the
-    // offline single-user build.
+    // same generateContent call. A mock interview session can't even start
+    // without a configured key (see interview-session.ts), so this is
+    // already guaranteed to be set by the time a spoken answer arrives.
     const geminiKey = await getUserAiKey(user.id, "gemini");
 
     const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");

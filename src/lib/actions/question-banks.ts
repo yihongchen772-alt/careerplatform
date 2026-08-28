@@ -148,9 +148,9 @@ export async function fillBankAnswers(
       .filter(({ q }) => !q.referenceAnswer);
     if (pending.length === 0) throw new UserFacingError("这个题库的题目都已经有参考思路了");
 
-    // No hard requirement on a personal key — this app has a shared quota,
-    // so a null config just falls through to callTextAi's own shared-Gemini
-    // fallback, same as the other AI features here.
+    // callTextAi throws a clear "configure your own key" error below if
+    // this comes back null — every AI feature here requires the user's own
+    // key, no shared fallback.
     const config = await getUserAiConfig(user.id);
 
     // Resume context sharpens the answers but must not gate the feature:

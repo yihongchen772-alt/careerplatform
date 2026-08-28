@@ -25,14 +25,16 @@ export type InterviewMessageDTO = {
   deliveryNote?: string | null;
 };
 
-/** Real back-and-forth chat — several AI calls per session, so it needs the
- * user's own key rather than the shared quota. The one-shot 面试攻略/题库
- * features stay on shared quota; this one doesn't. */
+/** Every AI feature requires the user's own key (callTextAi/generateStructured
+ * throw a generic version of this same error) — this just gives the mock
+ * interview's specific reason up front, before the session even starts,
+ * since a real back-and-forth chat calls the model several times per
+ * session rather than once. */
 async function requireOwnAiConfig(userId: string) {
   const config = await getUserAiConfig(userId);
   if (!config) {
     throw new UserFacingError(
-      "模拟面试对话需要先在「账号设置」里配置你自己的 AI API Key —— 一次对话要调用好几次模型，比一次性生成的功能耗费多很多，共享额度扛不住"
+      "模拟面试对话需要先在「账号设置」里配置你自己的 AI API Key —— 一次对话要调用好几次模型"
     );
   }
   return config;

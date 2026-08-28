@@ -172,9 +172,8 @@ export async function askAssistant(
     const user = await requireUser();
     if (!message.trim()) throw new UserFacingError("说点什么吧");
 
-    // No hard requirement on a personal key here — this app has a shared
-    // quota, so a null config just falls through to callTextAi's own
-    // shared-Gemini fallback, same as the other AI features.
+    // callTextAi throws a clear "configure your own key" error below if
+    // this comes back null.
     const config = await getUserAiConfig(user.id);
 
     const snapshot = await buildSnapshot(user.id);

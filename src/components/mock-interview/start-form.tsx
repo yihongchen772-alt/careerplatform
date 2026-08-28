@@ -86,12 +86,12 @@ export function MockInterviewStartForm({
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            这是多轮对话形式的模拟面试，每一轮都要调用一次 AI，比其他一次性生成的功能耗费多很多。
+            这是多轮对话形式的模拟面试，每一轮都要调用一次 AI。
             请先去{" "}
             <a href="/settings" className="text-primary underline underline-offset-4">
               账号设置
             </a>{" "}
-            配置你自己的 AI API Key 才能用，不会占用平台共享额度。
+            配置你自己的 AI API Key 才能用。
           </p>
         </CardContent>
       </Card>
