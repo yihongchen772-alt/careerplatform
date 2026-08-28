@@ -69,6 +69,7 @@ export async function addStageUpdate(
         interviewFormat: data.interviewFormat,
         interviewer: data.interviewer,
         nextDeadline: data.nextDeadline ?? undefined,
+        nextDeadlineEnd: data.nextDeadlineEnd ?? undefined,
       },
     });
 

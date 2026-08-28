@@ -17,7 +17,7 @@ import { PersonalTaskCard } from "@/components/dashboard/personal-task-card";
 export default async function DashboardPage() {
   const user = await requireUser();
 
-  const [applications, positions, stageHistories, personalTasks, allPositions] =
+  const [applications, positions, stageHistories, personalTasks, allPositions, contacts] =
     await Promise.all([
       db.application.findMany({
         where: { userId: user.id },
@@ -42,6 +42,10 @@ export default async function DashboardPage() {
         where: { userId: user.id },
         include: { company: true },
       }),
+      db.contact.findMany({
+        where: { userId: user.id, nextFollowUpAt: { not: null } },
+        select: { id: true, name: true, companyName: true, nextFollowUpAt: true },
+      }),
     ]);
 
   const funnelApps = await db.application.findMany({
@@ -56,7 +60,7 @@ export default async function DashboardPage() {
 
   const { levels } = computeFunnel(funnelApps);
   const outcomes = computeOutcomes(funnelApps);
-  const todos = buildTodos(applications, positions, stageHistories, personalTasks);
+  const todos = buildTodos(applications, positions, stageHistories, personalTasks, contacts);
 
   // Prefixed because a position and the application it turned into share the
   // same company/title — without this the picker shows two identical rows.
@@ -81,6 +85,7 @@ export default async function DashboardPage() {
           title: t.title,
           note: t.note,
           dueDate: t.dueDate?.toISOString() ?? null,
+          dueDateEnd: t.dueDateEnd?.toISOString() ?? null,
           positionId: t.positionId,
           applicationId: t.applicationId,
           done: t.done,

@@ -16,15 +16,32 @@ import {
 import { addStageUpdate } from "@/lib/actions/applications";
 import { addAttachment } from "@/lib/actions/attachments";
 import { FileUploadButton } from "@/components/ui/file-upload-button";
-import { STAGE_LABELS } from "@/lib/stage-labels";
+import { STAGE_LABELS, STAGE_ORDER } from "@/lib/stage-labels";
 import type { ApplicationStage } from "@prisma/client";
 
-export function AddStageForm({ applicationId }: { applicationId: string }) {
-  const [stage, setStage] = useState<ApplicationStage>("SCREENING");
+/** The stage right after the current one, or the current stage itself if
+ * it's already the last one in the pipeline (OFFER/terminal stages) — those
+ * don't have an obvious "next", so falling back avoids guessing wrong. */
+function nextStageAfter(current: ApplicationStage): ApplicationStage {
+  const i = STAGE_ORDER.indexOf(current);
+  return i >= 0 && i + 1 < STAGE_ORDER.length ? STAGE_ORDER[i + 1] : current;
+}
+
+export function AddStageForm({
+  applicationId,
+  currentStage,
+}: {
+  applicationId: string;
+  currentStage: ApplicationStage;
+}) {
+  const [stage, setStage] = useState<ApplicationStage>(() =>
+    nextStageAfter(currentStage)
+  );
   const [note, setNote] = useState("");
   const [interviewFormat, setInterviewFormat] = useState("");
   const [interviewer, setInterviewer] = useState("");
   const [nextDeadline, setNextDeadline] = useState("");
+  const [nextDeadlineEnd, setNextDeadlineEnd] = useState("");
   const [pendingFiles, setPendingFiles] = useState<{ url: string; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -38,15 +55,19 @@ export function AddStageForm({ applicationId }: { applicationId: string }) {
         interviewFormat: interviewFormat || undefined,
         interviewer: interviewer || undefined,
         nextDeadline: nextDeadline ? new Date(nextDeadline) : undefined,
+        nextDeadlineEnd:
+          nextDeadline && nextDeadlineEnd ? new Date(nextDeadlineEnd) : undefined,
       });
       await Promise.all(
         pendingFiles.map((f) => addAttachment({ stageHistoryId, ...f }))
       );
       toast.success("已更新进展");
+      setStage((s) => nextStageAfter(s));
       setNote("");
       setInterviewFormat("");
       setInterviewer("");
       setNextDeadline("");
+      setNextDeadlineEnd("");
       setPendingFiles([]);
     } catch {
       toast.error("更新失败，请重试");
@@ -96,9 +117,25 @@ export function AddStageForm({ applicationId }: { applicationId: string }) {
           <Input
             type="date"
             value={nextDeadline}
-            onChange={(e) => setNextDeadline(e.target.value)}
+            onChange={(e) => {
+              setNextDeadline(e.target.value);
+              if (!e.target.value) setNextDeadlineEnd("");
+            }}
           />
         </div>
+        {nextDeadline && (
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">
+              窗口结束日期（可选——笔试/测评这类给一段时间窗口的，填这个）
+            </Label>
+            <Input
+              type="date"
+              min={nextDeadline}
+              value={nextDeadlineEnd}
+              onChange={(e) => setNextDeadlineEnd(e.target.value)}
+            />
+          </div>
+        )}
       </div>
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">复盘笔记</Label>
