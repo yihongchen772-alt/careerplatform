@@ -11,20 +11,23 @@ const AI_PROVIDERS: Record<AiProviderId, { defaultModel: string }> =
     AI_PROVIDER_OPTIONS.map((p) => [p.id, { defaultModel: p.defaultModel }])
   ) as Record<AiProviderId, { defaultModel: string }>;
 
-// OpenAI, DeepSeek, and Kimi all speak the same /chat/completions wire format,
-// so one function handles all three — only the base URL and default model
-// actually differ between them. Exported so ai-models.ts (model-list fetch)
-// can reuse it without duplicating the map.
-export const OPENAI_COMPATIBLE_BASE_URL: Record<"openai" | "deepseek" | "kimi", string> = {
+// OpenAI, DeepSeek, Kimi, and Qwen all speak the same /chat/completions wire
+// format, so one function handles all four — only the base URL and default
+// model actually differ between them. A user can override the base URL per
+// key (see AiKey.baseUrl) for workspace-specific or self-hosted endpoints.
+export const OPENAI_COMPATIBLE_BASE_URL: Record<"openai" | "deepseek" | "kimi" | "qwen", string> = {
   openai: "https://api.openai.com/v1",
   deepseek: "https://api.deepseek.com/v1",
   kimi: "https://api.moonshot.cn/v1",
+  qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
 };
 
 export type UserAiConfig = {
   provider: AiProviderId;
   apiKey: string;
   model: string;
+  /** Only meaningful for OPENAI_COMPATIBLE_PROVIDERS; overrides the default base URL above. */
+  baseUrl?: string;
 };
 
 /**
@@ -46,6 +49,7 @@ export async function getUserAiKey(
     provider,
     apiKey: decryptSecret(key.apiKeyEncrypted),
     model: key.model || AI_PROVIDERS[provider].defaultModel,
+    baseUrl: key.baseUrl ?? undefined,
   };
 }
 
@@ -71,22 +75,24 @@ export function extractJson(text: string): unknown {
   try {
     return JSON.parse(raw);
   } catch {
+    console.error("[extractJson] unparseable, length:", raw.length, "tail:", raw.slice(-300));
     throw new UserFacingError("AI 返回格式异常，请重试");
   }
 }
 
 async function callOpenAiCompatible(
-  provider: "openai" | "deepseek" | "kimi",
+  provider: "openai" | "deepseek" | "kimi" | "qwen",
   apiKey: string,
   model: string,
   prompt: string,
-  timeoutMs: number
+  timeoutMs: number,
+  baseUrlOverride?: string
 ): Promise<unknown> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
   try {
-    response = await fetch(`${OPENAI_COMPATIBLE_BASE_URL[provider]}/chat/completions`, {
+    response = await fetch(`${baseUrlOverride || OPENAI_COMPATIBLE_BASE_URL[provider]}/chat/completions`, {
       method: "POST",
       signal: controller.signal,
       headers: {
@@ -102,7 +108,7 @@ async function callOpenAiCompatible(
         // response_format: json_object.
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
-        // Without this, DeepSeek/OpenAI/Kimi fall back to their own
+        // Without this, DeepSeek/OpenAI/Kimi/Qwen fall back to their own
         // (commonly 4096-token) default — a multi-question interview Q&A
         // generation (6-8 items, each with a full reference answer) can run
         // right up against that and get cut off mid-JSON, which then fails
@@ -233,12 +239,14 @@ export async function callTextAi({
     case "openai":
     case "deepseek":
     case "kimi":
+    case "qwen":
       return callOpenAiCompatible(
         config.provider,
         config.apiKey,
         config.model,
         withSchemaReminder(prompt, schema),
-        timeoutMs
+        timeoutMs,
+        config.baseUrl
       );
     case "anthropic":
       return callAnthropic(

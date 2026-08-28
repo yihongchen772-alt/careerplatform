@@ -23,7 +23,11 @@ import {
   type AiKeyOverview,
 } from "@/lib/actions/ai-keys";
 import { listProviderModels } from "@/lib/actions/ai-models";
-import { AI_PROVIDER_OPTIONS, SEED_MODELS } from "@/lib/ai-provider-labels";
+import {
+  AI_PROVIDER_OPTIONS,
+  SEED_MODELS,
+  OPENAI_COMPATIBLE_PROVIDERS,
+} from "@/lib/ai-provider-labels";
 import type { AiProviderId } from "@/lib/ai-provider-labels";
 
 /** Sentinel Select value that reveals the free-text model field. */
@@ -43,8 +47,12 @@ export function AiSettingsForm({ keys }: { keys: AiKeyOverview[] }) {
           {hasAnyKey
             ? "可以同时配置多个服务商的 Key，切换默认服务商供面试攻略、模拟面试等文字类功能使用。"
             : "AI 功能都需要你自己的 API Key 才能用，没有共享额度。"}
-          简历体检、岗位匹配需要直接读取 PDF/图片文件，这两个功能固定用下面的
-          Gemini Key（其他服务商做不到读文件），跟上面的&ldquo;默认&rdquo;选择无关，不配置就用不了这两个功能。
+          有两类功能会挑服务商：<span className="font-medium">读文件</span>
+          （简历体检、岗位匹配）只能用 Gemini/Claude/OpenAI；
+          <span className="font-medium">联网搜索</span>
+          （岗位口碑调研）可以用 Qwen/Gemini/Claude/OpenAI。都会优先用你的默认服务商，
+          不支持时自动换成你配了的、支持的那个。搜索优先挑 Qwen——Gemini 免费版的联网搜索额度
+          极少，很快就会用完。
         </p>
 
         <div className="space-y-2">
@@ -79,6 +87,7 @@ function ProviderRow({
 }) {
   const [apiKey, setApiKey] = useState("");
   const savedModels = (entry.model ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+  const isOpenAiCompatible = OPENAI_COMPATIBLE_PROVIDERS.includes(entry.provider);
   const meta = AI_PROVIDER_OPTIONS.find((p) => p.id === entry.provider)!;
 
   // Saved models come first so their order — which for Gemini *is* the
@@ -100,6 +109,7 @@ function ProviderRow({
       ? initialSingle
       : initialSingle || meta.defaultModel
   );
+  const [baseUrl, setBaseUrl] = useState(entry.baseUrl ?? "");
   const [loading, setLoading] = useState(false);
   const [settingDefault, setSettingDefault] = useState(false);
 
@@ -120,6 +130,7 @@ function ProviderRow({
         // Lets the button work while first configuring, before the key is
         // saved; falls back to the stored key when the field is left blank.
         apiKey: apiKey || undefined,
+        baseUrl: isOpenAiCompatible ? baseUrl || undefined : undefined,
       });
       if (!res.ok) {
         toast.error(res.message);
@@ -152,6 +163,7 @@ function ProviderRow({
         provider: entry.provider,
         apiKey,
         model: finalModel || undefined,
+        baseUrl: isOpenAiCompatible ? baseUrl || undefined : undefined,
       });
       toast.success(`${entry.label} 已保存`);
       setApiKey("");
@@ -323,6 +335,22 @@ function ProviderRow({
             )}
           </div>
 
+          {isOpenAiCompatible && (
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">
+                API 地址（可选，不填用默认地址）
+              </Label>
+              <Input
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder="https://.../compatible-mode/v1"
+              />
+              <p className="text-xs text-muted-foreground">
+                工作空间专属网关（比如阿里云百炼）或者自建代理地址填这里，不填就用这个
+                服务商的公共默认地址。
+              </p>
+            </div>
+          )}
           <Button type="button" size="sm" disabled={loading} onClick={handleSave}>
             {loading ? "保存中..." : "保存"}
           </Button>

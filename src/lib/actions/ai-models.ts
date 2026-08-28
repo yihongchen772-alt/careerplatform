@@ -4,7 +4,10 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { decryptSecret } from "@/lib/crypto";
 import { OPENAI_COMPATIBLE_BASE_URL } from "@/lib/ai-providers";
-import type { AiProviderId } from "@/lib/ai-provider-labels";
+import {
+  OPENAI_COMPATIBLE_PROVIDERS,
+  type AiProviderId,
+} from "@/lib/ai-provider-labels";
 import { toActionResult, UserFacingError, type ActionResult } from "@/lib/action-result";
 
 const TIMEOUT_MS = 15000;
@@ -45,25 +48,32 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
 
 /**
  * Asks the provider itself which models this key can call, instead of
- * shipping a hardcoded list that goes stale. `apiKey` may be passed
- * directly so the button works while first configuring a provider, before
- * the key has been saved; when omitted the stored (encrypted) key is used.
+ * shipping a hardcoded list that goes stale. Every provider here exposes
+ * such an endpoint; the response shapes differ, hence the switch.
+ *
+ * `apiKey` may be passed directly so the button works while first
+ * configuring a provider, before the key has been saved. When omitted the
+ * stored (encrypted) key is used, so an already-configured provider doesn't
+ * make the user retype it.
  */
 export async function listProviderModels(input: {
   provider: AiProviderId;
   apiKey?: string;
+  baseUrl?: string;
 }): Promise<ActionResult<{ models: string[] }>> {
   return toActionResult(async () => {
     const user = await requireUser();
     const { provider } = input;
 
     let apiKey = input.apiKey?.trim();
+    let baseUrl = input.baseUrl?.trim();
     if (!apiKey) {
       const stored = await db.aiKey.findUnique({
         where: { userId_provider: { userId: user.id, provider } },
       });
       if (!stored) throw new UserFacingError("先填上 API Key，再拉模型列表");
       apiKey = decryptSecret(stored.apiKeyEncrypted);
+      baseUrl = baseUrl || stored.baseUrl || undefined;
     }
 
     let models: string[];
@@ -74,6 +84,8 @@ export async function listProviderModels(input: {
         {}
       )) as { models?: { name?: string; supportedGenerationMethods?: string[] }[] };
       models = (data.models ?? [])
+        // Only the ones that can actually answer a generateContent call —
+        // the listing also carries embedding and image models.
         .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
         .map((m) => (m.name ?? "").replace(/^models\//, ""))
         .filter((m) => m.startsWith("gemini"));
@@ -83,16 +95,22 @@ export async function listProviderModels(input: {
         "anthropic-version": "2023-06-01",
       })) as { data?: { id?: string }[] };
       models = (data.data ?? []).map((m) => m.id ?? "").filter(Boolean);
-    } else {
-      const base = OPENAI_COMPATIBLE_BASE_URL[provider as keyof typeof OPENAI_COMPATIBLE_BASE_URL];
+    } else if (OPENAI_COMPATIBLE_PROVIDERS.includes(provider)) {
+      const base =
+        baseUrl ||
+        OPENAI_COMPATIBLE_BASE_URL[provider as keyof typeof OPENAI_COMPATIBLE_BASE_URL];
       const data = (await getJson(`${base.replace(/\/$/, "")}/models`, {
         Authorization: `Bearer ${apiKey}`,
       })) as { data?: { id?: string }[] };
       models = (data.data ?? [])
         .map((m) => m.id ?? "")
         .filter((id) => id && !NON_CHAT.test(id));
+    } else {
+      throw new UserFacingError("这个服务商不支持自动获取模型列表");
     }
 
+    // Newest-looking names first: providers return these in no useful order,
+    // and the highest version number is almost always what the user wants.
     models = Array.from(new Set(models)).sort((a, b) =>
       b.localeCompare(a, "en", { numeric: true })
     );
