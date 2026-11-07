@@ -1,5 +1,6 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { Upload, FileText, Paperclip } from "lucide-react";
@@ -47,15 +48,11 @@ export function LibraryView({ files }: { files: LibraryFile[] }) {
   async function handleUpload(file: File) {
     setUploading(true);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/upload/library", { method: "POST", body: form });
-      const json = await res.json();
-      if (!res.ok) {
-        toast.error(json.error ?? "上传失败");
-        return;
-      }
-      await addAttachment({ category, url: json.url, name: json.name });
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/blob/upload-library",
+      });
+      await addAttachment({ category, url: blob.url, name: file.name });
       toast.success(`已存进「${category}」`);
     } catch {
       toast.error("上传失败，请重试");
@@ -112,7 +109,7 @@ export function LibraryView({ files }: { files: LibraryFile[] }) {
             }}
           />
           <p className="text-xs text-muted-foreground">
-            PDF、图片、Word/PPT/Excel、zip、txt，单个 25MB 以内。文件保存在服务器上，只有你的账号能打开。
+            PDF、图片、Word/PPT/Excel、zip、txt，单个 25MB 以内。文件会上传到云端存储。
           </p>
         </CardContent>
       </Card>

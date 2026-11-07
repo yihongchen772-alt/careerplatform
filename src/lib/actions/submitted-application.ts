@@ -34,7 +34,7 @@ export async function recordSubmittedApplication(input: z.input<typeof schema>) 
     if (data.snapshot && resume?.fileUrl) {
       const file = await readStoredFile(resume.fileUrl);
       if (!file) throw new Error("简历文件读取失败，无法保存材料包");
-      copy = await saveLocalFile(user.id, file.buffer, file.mimeType);
+      copy = await saveLocalFile(file.buffer, file.mimeType);
     }
     const result = await db.$transaction(async (tx) => {
       const duplicate = await tx.application.findFirst({ where: { userId: user.id, companyId, title: data.title, applyUrl: data.applyUrl } });
