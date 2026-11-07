@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
 import { ExportDataButton } from "@/components/settings/export-data-button";
+import { ExtensionCard } from "@/components/settings/extension-card";
+import { getExtensionPairing } from "@/lib/actions/extension";
 import { ImportDesktopCard } from "@/components/settings/import-desktop-card";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
@@ -134,11 +136,12 @@ async function AutofillSection({ user: loaded }: { user: User }) {
 }
 
 async function MemorySection({ userId }: { userId: string }) {
-  const { memoryViews, answers } = await loadMemories(userId);
+  const [{ memoryViews, answers }, extensionPairing] = await Promise.all([loadMemories(userId), getExtensionPairing()]);
   return (
     <>
       <ApplicationMemoryCard initial={memoryViews} />
       <AutofillMemoryCard initial={answers} />
+      <ExtensionCard initial={extensionPairing} />
     </>
   );
 }

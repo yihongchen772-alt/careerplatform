@@ -1,0 +1,53 @@
+:root { color-scheme: light dark; --bg: #fff; --fg: #1f2328; --muted: #57606a; --line: #d0d7de; --accent: #4f46e5; --accent-fg: #fff; --soft: #f6f8fa; --warn: #9a6700; --err: #b42318; }
+@media (prefers-color-scheme: dark) { :root { --bg: #161b22; --fg: #e6edf3; --muted: #9da7b3; --line: #30363d; --accent: #818cf8; --accent-fg: #0d1117; --soft: #0d1117; --warn: #d4a72c; --err: #ff7b72; } }
+* { box-sizing: border-box; }
+body { width: 100%; min-width: 300px; max-width: 440px; margin: 0; padding: 12px 14px 14px; background: var(--bg); color: var(--fg); font: 13px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+header strong { flex: 1; font-size: 14px; }
+.pill { padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); font-size: 11px; white-space: nowrap; }
+.pill.ok { color: #1a7f37; }
+.pill.bad { color: var(--err); }
+section { display: flex; flex-direction: column; gap: 8px; }
+label { display: flex; flex-direction: column; gap: 3px; color: var(--muted); font-size: 12px; }
+label.check { flex-direction: row; align-items: center; gap: 6px; }
+select, input:not([type=checkbox]) { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; }
+button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--fg); font: inherit; cursor: pointer; }
+button:disabled { opacity: .6; cursor: default; }
+button.primary { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.row button { padding: 6px 4px; font-size: 12px; }
+form { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px dashed var(--line); border-radius: 8px; }
+.hint { margin: 0; color: var(--muted); font-size: 11.5px; }
+.error { margin: 0; color: var(--err); }
+.message { margin: 0; padding: 8px; border-radius: 8px; background: var(--soft); white-space: pre-wrap; }
+.banner { padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--soft); font-size: 12px; }
+.banner.warn { border-color: #d4a72c80; }
+.banner.portal { border-color: #0969da80; }
+.banner.success { border-color: #1a7f3780; }
+.banner button { margin-top: 6px; width: 100%; }
+
+[hidden] { display: none !important; }
+
+#fill-scope { padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+#fill-scope summary { cursor: pointer; font-weight: 600; }
+#fill-scope .hint { margin: 6px 0; }
+#fill-scope label { margin: 5px 0; }
+.scope-actions { display: flex; gap: 6px; margin: 6px 0; }
+.scope-actions button, #learned-undo { padding: 3px 8px; font-size: 12px; }
+
+#plan fieldset { margin: 8px 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+#plan textarea { width: 100%; min-height: 70px; background: var(--bg); color: var(--fg); border: 1px solid var(--line); }
+#profile-cards button { display: block; width: 100%; margin: 6px 0; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+#agent-log { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow-y: auto; margin: 6px 0; }
+.bubble { border-radius: 8px; padding: 6px 8px; white-space: pre-wrap; line-height: 1.5; }
+.bubble.user { background: #eef2ff; align-self: flex-end; max-width: 90%; }
+.bubble.ai { background: #f4f4f5; }
+.bubble.error { background: #fef2f2; color: #b91c1c; }
+.bubble.working { color: #71717a; font-size: 12px; }
+.draft { border: 1px solid #c7d2fe; background: #f5f7ff; border-radius: 8px; padding: 6px 8px; }
+.draft .q { font-weight: 600; margin-bottom: 4px; }
+.draft .a { white-space: pre-wrap; max-height: 160px; overflow-y: auto; line-height: 1.5; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; }
+#agent-input { width: 100%; box-sizing: border-box; }

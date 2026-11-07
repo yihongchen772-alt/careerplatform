@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>求职罗盘 · 网申助手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon-32.png" alt="" width="20" height="20">
+    <strong>求职罗盘 · 网申助手</strong>
+    <span id="conn" class="pill">连接中…</span>
+  </header>
+
+  <section id="pair" hidden>
+    <p class="hint">第一次使用：打开求职罗盘网站 → 设置 → 浏览器插件，点「生成配对码」，复制后粘贴到这里。</p>
+    <input id="pair-token" placeholder="粘贴配对码" autocomplete="off">
+    <button id="pair-btn" class="primary">连接</button>
+    <p id="pair-error" class="error" hidden></p>
+  </section>
+
+  <section id="offline" hidden>
+    <p class="error" id="offline-text">连不上求职罗盘：请检查网络后重试</p>
+    <button id="retry">重试</button>
+  </section>
+
+  <section id="main" hidden>
+    <button id="sidepanel" type="button">打开常驻侧栏</button>
+    <div id="site"></div>
+    <label>当前申请岗位<select id="job"><option value="">未关联（通用填写）</option></select></label>
+    <p id="job-hint" class="hint"></p>
+    <label>简历（上传附件、AI 作答依据）
+      <select id="resume"></select>
+    </label>
+    <label id="variant-row" hidden>网申资料方案
+      <select id="variant"></select>
+    </label>
+    <details id="fill-scope">
+      <summary id="scope-summary">填写范围：全部模块</summary>
+      <p class="hint">只补所选模块的空白，已填内容保留。选择会保存填写范围，快捷键也使用此范围。</p>
+      <div class="scope-actions"><button id="scope-all" type="button">全选</button><button id="scope-none" type="button">取消全选</button></div>
+      <label class="check"><input type="checkbox" data-module="basic" checked> 基本信息 / 求职意向</label>
+      <label class="check"><input type="checkbox" data-module="education" checked> 教育经历</label>
+      <label class="check"><input type="checkbox" data-module="experience" checked> 实习 / 工作经历</label>
+      <label class="check"><input type="checkbox" data-module="project" checked> 项目经历</label>
+      <label class="check"><input type="checkbox" data-module="award" checked> 获奖情况</label>
+      <label class="check"><input type="checkbox" data-module="campus" checked> 校园经历</label>
+      <label class="check"><input type="checkbox" data-module="skill" checked> 专业技能</label>
+      <label class="check"><input type="checkbox" data-module="questions" checked> 开放题 / 自我评价</label>
+      <label class="check"><input type="checkbox" data-module="other" checked> 其他字段</label>
+      <label class="check"><input type="checkbox" data-module="resume" checked> 简历附件</label>
+    </details>
+    <label class="check"><input type="checkbox" id="expand"> 自动补齐所选栏目（资料段数多于页面时点「添加」）</label>
+    <label class="check"><input type="checkbox" id="auto-remember" checked> 记住我在本网站手填的内容</label>
+    <p id="memory-state" class="hint">网页草稿自动保存；离开输入框后检测：网申资料里还空着的直接记进去（可撤销），其他的先放进待核对。离开页面前请等待保存状态。</p>
+    <p id="learned-state" class="hint" hidden><span id="learned-text"></span> <button id="learned-undo" type="button">撤销</button></p>
+    <label>开放题长度<select id="answer-length"><option value="100">100 字</option><option value="200" selected>200 字</option><option value="300">300 字</option><option value="500">500 字</option></select></label>
+    <button id="preview" type="button">扫描并逐字段预览</button>
+    <div id="plan" hidden></div>
+    <details><summary>资料卡 · 点击复制</summary><div id="profile-cards"></div></details>
+    <button id="fill" class="primary">一键填写这一页</button>
+    <button id="cancel" hidden>停止填写</button>
+    <div class="row">
+      <button id="save" title="检查这页完整的项目、实习、获奖和手填回答，放入待核对列表">核对本页变化</button>
+      <button id="capture" title="用 AI 解析这页岗位信息，加进候选岗位池">收藏岗位</button>
+      <button id="record-toggle">记为已投递</button>
+    </div>
+    <form id="record" hidden>
+      <p id="record-hint" class="hint" role="status" hidden></p>
+      <input id="record-company" placeholder="公司" required>
+      <input id="record-title" placeholder="岗位" required>
+      <button class="primary" type="submit">保存到投递记录</button>
+    </form>
+    <p id="message" class="message" hidden></p>
+    <details id="result-details" hidden><summary>逐字段填写结果</summary><label class="check"><input id="only-manual" type="checkbox" checked>只看未填 / 失败</label><ul id="result-list"></ul></details>
+    <details id="agent">
+      <summary>✨ 问小欧（看着这个页面回答）</summary>
+      <p class="hint">问这个岗位值不值得投、这家公司怎么样，或者让小欧按你的真实经历写这页的开放题，写好点「填进这一栏」。</p>
+      <div id="agent-log"></div>
+      <div class="chips">
+        <button type="button" class="chip" data-ask="这个岗位值得投吗？和我的经历匹配吗？">值得投吗？</button>
+        <button type="button" class="chip" data-ask="按我的真实经历，写这页的开放题，按字数要求">写这页的开放题</button>
+        <button type="button" class="chip" data-ask="这家公司怎么样？最近的校招和面经">这家公司怎么样？</button>
+      </div>
+      <textarea id="agent-input" rows="2" placeholder="交给小欧一件事…" maxlength="6000"></textarea>
+      <div class="row"><button id="agent-send" class="primary" type="button">发送</button><button id="agent-clear" type="button">新对话</button></div>
+    </details>
+    <p class="hint">快捷键 Alt+Shift+Y 也能填写当前页。提交前请核对所有内容，插件不会替你点提交。</p>
+  </section>
+  <script src="popup.js"></script>
+</body>
+</html>

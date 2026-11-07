@@ -5,7 +5,7 @@ export type SettingsTab = "profile" | "autofill" | "memory" | "ai" | "mail" | "a
 export const SETTINGS_TABS: { id: SettingsTab; label: string; description: string }[] = [
   { id: "profile", label: "个人资料", description: "姓名、联系方式、学校和求职方向。小欧和 AI 功能会按这里的方向和城市给建议。" },
   { id: "autofill", label: "网申资料", description: "一键填写用的资料，以及网申里新写的、等你确认的内容。" },
-  { id: "memory", label: "经历与问答", description: "确认过的经历版本和问答，一键填写会从这里选。" },
+  { id: "memory", label: "经历与问答", description: "确认过的经历版本和问答，一键填写会从这里选；还有浏览器插件。" },
   { id: "ai", label: "AI", description: "选择正在使用的模型、管理各家 API Key。" },
   { id: "mail", label: "邮件与提醒", description: "自动读取求职邮件和每日提醒邮件。" },
   { id: "appearance", label: "外观", description: "界面风格、配色和深浅色。选择后立即生效。" },

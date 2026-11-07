@@ -2,6 +2,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requestUser } from "@/lib/request-user";
 
 /**
  * The signed-in user's full row. The desktop build's requireUser() returns the
@@ -10,8 +11,7 @@ import { db } from "@/lib/db";
  * Cached per request because a layout and its page both call this.
  */
 export const requireUser = cache(async () => {
-  const session = await auth();
-  const id = session?.user?.id;
+  const id = requestUser.getStore() ?? (await auth())?.user?.id;
   if (!id) redirect("/login");
 
   // A valid JWT can outlive its row (account deleted), hence the second check.
