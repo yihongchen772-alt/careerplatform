@@ -292,7 +292,7 @@ export function InterviewHub({
             </ul>
           )}
         </div>
-        <div className="grid content-start gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 content-start gap-2 sm:grid-cols-2">
           {tools.map((tool) => {
             const Icon = tool.icon;
             const body = (

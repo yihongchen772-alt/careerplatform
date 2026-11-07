@@ -31,7 +31,6 @@ import {
 import { MarkAppliedDialog } from "@/components/pool/mark-applied-dialog";
 import {
   MatchResumeDialog,
-  MatchResumeTrigger,
 } from "@/components/pool/match-resume-dialog";
 import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import { deletePosition } from "@/lib/actions/positions";
@@ -41,15 +40,12 @@ import { ApplicationRulesDialog } from "@/components/pool/application-rules-dial
 import { PositionFormDialog } from "@/components/pool/position-form-dialog";
 import {
   CompanyInsightDialog,
-  CompanyInsightTrigger,
 } from "@/components/pool/company-insight-dialog";
 import {
   InterviewPrepDialog,
-  InterviewPrepTrigger,
 } from "@/components/pool/interview-prep-dialog";
 import {
   CoverLetterDialog,
-  CoverLetterTrigger,
 } from "@/components/pool/cover-letter-dialog";
 import type { PositionStatus } from "@prisma/client";
 import type { InterviewPrep, GroupInterviewPrep } from "@/lib/validation";
@@ -315,6 +311,53 @@ export function PoolTable({
     }
   }
 
+  // The same compact actions in the table row and the phone card: one main
+  // action, AI tools in a menu, the rest as icons.
+  function rowActions(p: (typeof sorted)[number]) {
+    return (
+      <div className="flex items-center justify-end gap-1">
+        {p.jdUrl ? (
+          <a
+            href={p.jdUrl} target="_blank" rel="noreferrer"
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+          >
+            <Globe className="size-3.5" />
+            网申
+          </a>
+        ) : p.status !== "APPLIED" ? (
+          <Button size="sm" variant="secondary" onClick={() => setMarkingId(p.id)}>标记已投</Button>
+        ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button size="sm" variant="ghost" className="px-2" aria-label={`${p.company.name} · ${p.title} 的 AI 工具`} title="AI 工具：匹配、面试攻略、自荐信、口碑、简历深挖、定制简历" />}>
+            <Sparkles className="size-3.5" /><ChevronDown className="size-3" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={() => setMatchingId(p.id)}>选简历 · 匹配分析</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setPrepId(p.id)}>面试攻略</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setLetterId(p.id)}>自荐信</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setInsightId(p.id)}>岗位口碑</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push(`/resume-drill?position=${p.id}`)}><Crosshair className="size-3.5" />简历深挖</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push(`/resumes/tailor?positionId=${p.id}`)}><FileText className="size-3.5" />定制简历</DropdownMenuItem>
+            {p.jdUrl && p.status !== "APPLIED" && <><DropdownMenuSeparator /><DropdownMenuItem onClick={() => setMarkingId(p.id)}>标记已投</DropdownMenuItem></>}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <ApplicationRulesDialog positionId={p.id} trigger={<Button size="icon-sm" variant="ghost" aria-label="报名规则" title="报名规则"><ClipboardCheck className="size-3.5" /></Button>} />
+        <PositionFormDialog
+          mode="edit"
+          positionId={p.id}
+          initial={toEditInitial(p)}
+          trigger={<Button size="icon-sm" variant="ghost" aria-label="编辑" title="编辑"><Pencil className="size-3.5" /></Button>}
+        />
+        <ConfirmDeleteButton
+          trigger={<Button size="icon-sm" variant="ghost" aria-label="删除" title="删除"><Trash2 className="size-3.5" /></Button>}
+          title={`确定删除 ${p.company.name} · ${p.title} 吗？`}
+          onConfirm={() => handleDelete(p.id)}
+        />
+      </div>
+    );
+  }
+
   return (
     <>
       {positions.length > 0 && (
@@ -390,28 +433,16 @@ export function PoolTable({
                   />
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{p.company.name}</p>
-                  <p className="truncate text-sm text-muted-foreground">
-                    {p.title}
-                  </p>
+                  <p className="line-clamp-2 break-words font-medium">{p.company.name}</p>
+                  <p className="line-clamp-2 break-words text-sm text-muted-foreground">{p.title}</p>
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  {p.interestScore !== null && (
-                    <Badge variant={scoreVariant(p.interestScore)}>
-                      {p.interestScore}
-                    </Badge>
-                  )}
-                  {p.bestMatch && (
-                    <Badge
-                      variant={scoreVariant(p.bestMatch.score)}
-                      title={p.bestMatch.recommendation}
-                    >
-                      AI {p.bestMatch.score}
-                    </Badge>
-                  )}
-                  <ReadinessBadge items={readinessItems(p)} />
-                  <OpportunityBadge opportunity={getOpportunity(p, historyByTrack)} />
-                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {p.interestScore !== null && <Badge variant={scoreVariant(p.interestScore)}>{p.interestScore}</Badge>}
+                {p.bestMatch && <Badge variant={scoreVariant(p.bestMatch.score)} title={p.bestMatch.recommendation}>AI {p.bestMatch.score}</Badge>}
+                <ReadinessBadge items={readinessItems(p)} compact />
+                <OpportunityBadge opportunity={getOpportunity(p, historyByTrack)} />
               </div>
 
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -436,70 +467,9 @@ export function PoolTable({
                 )}
               </div>
 
-              <div className="flex items-center justify-between">
-                <Badge variant="outline">
-                  {POSITION_STATUS_LABELS[p.status]}
-                </Badge>
-                <div className="flex flex-wrap justify-end gap-1">
-                  <MatchResumeTrigger onClick={() => setMatchingId(p.id)} />
-                  <InterviewPrepTrigger onClick={() => setPrepId(p.id)} />
-                  <CoverLetterTrigger onClick={() => setLetterId(p.id)} />
-                  <CompanyInsightTrigger onClick={() => setInsightId(p.id)} />
-                  {p.status !== "APPLIED" && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => setMarkingId(p.id)}
-                    >
-                      标记已投
-                    </Button>
-                  )}
-                  {p.jdUrl && (
-                    <a
-                      href={p.jdUrl} target="_blank" rel="noreferrer"
-                      className={buttonVariants({ size: "sm", variant: "outline" })}
-                    >
-                      <Globe className="size-3.5" />
-                      打开网申页面
-                    </a>
-                  )}
-                  <Link
-                    href={`/resume-drill?position=${p.id}`}
-                    className={buttonVariants({ size: "sm", variant: "outline" })}
-                    title="针对这个岗位的 JD，让 AI 按你的简历生成三层追问来练"
-                  >
-                    <Crosshair className="size-3.5" />
-                    简历深挖
-                  </Link>
-                  <Link
-                    href={`/resumes/tailor?positionId=${p.id}`}
-                    className={buttonVariants({ size: "sm", variant: "outline" })}
-                    title="在你的简历上按这个岗位的 JD 微调，版式不变，改完存成新的简历版本"
-                  >
-                    <FileText className="size-3.5" />
-                    定制简历
-                  </Link>
-                  <ApplicationRulesDialog positionId={p.id} />
-                  <PositionFormDialog
-                    mode="edit"
-                    positionId={p.id}
-                    initial={toEditInitial(p)}
-                    trigger={
-                      <Button size="sm" variant="outline">
-                        编辑
-                      </Button>
-                    }
-                  />
-                  <ConfirmDeleteButton
-                    trigger={
-                      <Button size="sm" variant="ghost">
-                        删除
-                      </Button>
-                    }
-                    title={`确定删除 ${p.company.name} · ${p.title} 吗？`}
-                    onConfirm={() => handleDelete(p.id)}
-                  />
-                </div>
+              <div className="flex items-center justify-between gap-2">
+                <Badge variant="outline">{POSITION_STATUS_LABELS[p.status]}</Badge>
+                {rowActions(p)}
               </div>
             </div>
           );
@@ -612,46 +582,7 @@ export function PoolTable({
                 <TableCell className="sticky right-0 z-10 bg-card text-right shadow-[-8px_0_12px_-10px_rgba(0,0,0,0.25)]">
                   {/* One main action, the AI tools in a menu, the rest as icons:
                       nine buttons in a row made this table 3x the window wide. */}
-                  <div className="flex items-center justify-end gap-1">
-                    {p.jdUrl ? (
-                      <a
-                        href={p.jdUrl} target="_blank" rel="noreferrer"
-                        className={buttonVariants({ size: "sm", variant: "outline" })}
-                      >
-                        <Globe className="size-3.5" />
-                        网申
-                      </a>
-                    ) : p.status !== "APPLIED" ? (
-                      <Button size="sm" variant="secondary" onClick={() => setMarkingId(p.id)}>标记已投</Button>
-                    ) : null}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={<Button size="sm" variant="ghost" className="px-2" aria-label={`${p.company.name} · ${p.title} 的 AI 工具`} title="AI 工具：匹配、面试攻略、自荐信、口碑、简历深挖、定制简历" />}>
-                        <Sparkles className="size-3.5" /><ChevronDown className="size-3" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem onClick={() => setMatchingId(p.id)}>选简历 · 匹配分析</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setPrepId(p.id)}>面试攻略</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setLetterId(p.id)}>自荐信</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setInsightId(p.id)}>岗位口碑</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => router.push(`/resume-drill?position=${p.id}`)}><Crosshair className="size-3.5" />简历深挖</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => router.push(`/resumes/tailor?positionId=${p.id}`)}><FileText className="size-3.5" />定制简历</DropdownMenuItem>
-                        {p.jdUrl && p.status !== "APPLIED" && <><DropdownMenuSeparator /><DropdownMenuItem onClick={() => setMarkingId(p.id)}>标记已投</DropdownMenuItem></>}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <ApplicationRulesDialog positionId={p.id} trigger={<Button size="icon-sm" variant="ghost" aria-label="报名规则" title="报名规则"><ClipboardCheck className="size-3.5" /></Button>} />
-                    <PositionFormDialog
-                      mode="edit"
-                      positionId={p.id}
-                      initial={toEditInitial(p)}
-                      trigger={<Button size="icon-sm" variant="ghost" aria-label="编辑" title="编辑"><Pencil className="size-3.5" /></Button>}
-                    />
-                    <ConfirmDeleteButton
-                      trigger={<Button size="icon-sm" variant="ghost" aria-label="删除" title="删除"><Trash2 className="size-3.5" /></Button>}
-                      title={`确定删除 ${p.company.name} · ${p.title} 吗？`}
-                      onConfirm={() => handleDelete(p.id)}
-                    />
-                  </div>
+                  {rowActions(p)}
                 </TableCell>
               </TableRow>
             );

@@ -382,7 +382,7 @@ export function ApplicationsView({ applications, now: serverNow, funnel, cityLoo
 
       {applications.length > 0 && (
       <div className="-mt-2 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="快捷筛选">
+        <div className="-mx-1 flex max-w-full items-center gap-1.5 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0" role="group" aria-label="快捷筛选">
           {chips.map((key) => (
             <button
               key={key}
@@ -391,7 +391,7 @@ export function ApplicationsView({ applications, now: serverNow, funnel, cityLoo
               title={FILTER_HINTS[key]}
               onClick={() => chooseFilter(key)}
               className={cn(
-                "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors",
+                "inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors sm:h-7",
                 filter === key ? "border-foreground bg-foreground text-background" : "border-border/70 bg-card/70 text-muted-foreground hover:border-primary/30 hover:text-foreground"
               )}
             >

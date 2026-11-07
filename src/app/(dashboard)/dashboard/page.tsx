@@ -257,7 +257,7 @@ export default async function DashboardPage() {
           <p className="mt-1 text-xs text-muted-foreground">先处理眼前的事，再回看整体进展。</p>
         </div>
       </div>
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] xl:items-start">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] xl:items-start">
         <div className="space-y-5">
           {/* 小欧's 今日简报 at the top says the same; the older digest only without it. */}
           {!(dbUser?.agentDailyBrief && dbUser.defaultAiProvider) && <DailyDigestCard initial={dailyDigest} />}
