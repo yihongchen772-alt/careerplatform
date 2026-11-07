@@ -9,7 +9,7 @@ export const SETTINGS_TABS: { id: SettingsTab; label: string; description: strin
   { id: "ai", label: "AI", description: "选择正在使用的模型、管理各家 API Key。" },
   { id: "mail", label: "邮件与提醒", description: "自动读取求职邮件和每日提醒邮件。" },
   { id: "appearance", label: "外观", description: "界面风格、配色和深浅色。选择后立即生效。" },
-  { id: "data", label: "账号与数据", description: "修改密码，导出你的全部数据。" },
+  { id: "data", label: "账号与数据", description: "导入桌面版数据，修改密码，导出你的全部数据。" },
 ];
 
 /** Card anchors linked from elsewhere in the app, by the group they are in. */

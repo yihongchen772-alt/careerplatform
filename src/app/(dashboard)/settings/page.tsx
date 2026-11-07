@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
 import { ExportDataButton } from "@/components/settings/export-data-button";
+import { ImportDesktopCard } from "@/components/settings/import-desktop-card";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { AiSettingsForm } from "@/components/settings/ai-settings-form";
 import { AgentSettingsCard } from "@/components/settings/agent-settings-card";
@@ -165,6 +166,7 @@ async function MailSection({ user }: { user: User }) {
 function DataSection() {
   return (
     <>
+      <ImportDesktopCard />
       <ChangePasswordForm />
       <ExportDataButton />
     </>
