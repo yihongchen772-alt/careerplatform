@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      UPLOADS_DIR: /data/uploads
+      AUTH_TRUST_HOST: "true"
+      NEXTAUTH_URL: https://${DOMAIN}
+    volumes:
+      - ./data/uploads:/data/uploads
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data

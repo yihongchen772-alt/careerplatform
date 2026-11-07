@@ -1,6 +1,5 @@
 "use client";
 
-import { upload } from "@vercel/blob/client";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -23,11 +22,15 @@ export function FileUploadButton({
 
     setUploading(true);
     try {
-      const blob = await upload(file.name, file, {
-        access: "public",
-        handleUploadUrl: "/api/blob/upload",
-      });
-      onUploaded({ url: blob.url, name: file.name });
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || "上传失败");
+      }
+      const data = (await res.json()) as { url: string; name: string };
+      onUploaded(data);
       toast.success("上传成功");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "上传失败，请重试");

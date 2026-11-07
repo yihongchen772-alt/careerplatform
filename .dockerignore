@@ -1,0 +1,8 @@
+.git
+.env*
+.next
+.vercel
+.playwright-mcp
+node_modules
+uploads
+data

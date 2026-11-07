@@ -1,10 +1,16 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Built on first send: constructing it needs the key, which `next build`
+// doesn't have when the image is built without runtime secrets.
+let client: Resend | undefined;
+function resendClient(): Resend {
+  client ??= new Resend(process.env.RESEND_API_KEY);
+  return client;
+}
 const FROM = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
-  const { error } = await resend.emails.send({
+  const { error } = await resendClient().emails.send({
     from: `秋招追踪 <${FROM}>`,
     to,
     subject: "重置你的密码",
@@ -37,7 +43,7 @@ export async function sendReminderDigestEmail(
     )
     .join("");
 
-  const { error } = await resend.emails.send({
+  const { error } = await resendClient().emails.send({
     from: `秋招追踪 <${FROM}>`,
     to,
     subject: "秋招追踪：今天有几件事要看一下",

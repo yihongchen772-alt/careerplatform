@@ -382,7 +382,7 @@ export async function saveTailoringAsVersion(id: string, name?: string, options:
     if (!draft?.doc) throw new UserFacingError("这份定制还没有生成");
     const label = versionName(draft, name);
     const pdf = await printResumePdf(renderResumeHtml(draft.doc, `${draft.doc.name || "简历"}-${label}`));
-    const { url } = await saveLocalFile(pdf, "application/pdf");
+    const { url } = await saveLocalFile(user.id, pdf, "application/pdf");
     const now = new Date();
     const data = {
       name: label,
