@@ -47,8 +47,8 @@ function Choice<T extends string>({ value, onChange, options }: { value: T; onCh
 
 /**
  * 求职战绩卡: one vertical picture of the numbers (投递 / 面试 / Offer, the
- * funnel or the industries) for a chat or a post. Nothing leaves the app —
- * it is saved to 下载 as a PNG.
+ * funnel or the industries) for a chat or a post. It is drawn in the
+ * browser and saved as a PNG.
  */
 export function ShareCardDialog({ stats }: { stats: ShareStats }) {
   const [open, setOpen] = useState(false);
@@ -75,11 +75,21 @@ export function ShareCardDialog({ stats }: { stats: ShareStats }) {
   async function save() {
     setBusy(true);
     try {
-      if (window.desktopBridge?.exportDocument) {
-        await window.desktopBridge.exportDocument({ format: "png", html, fileName: "求职战绩" });
-        toast.success("已保存到「下载」文件夹");
-      } else {
-        toast.error("请在桌面版里保存图片");
+      const { toPng } = await import("html-to-image");
+      const frame = document.createElement("iframe");
+      frame.style.cssText = `position:fixed;left:-10000px;top:0;border:0;width:${SHARE_CARD_WIDTH}px;height:${SHARE_CARD_HEIGHT}px`;
+      frame.srcdoc = html;
+      const loaded = new Promise((resolve) => { frame.onload = resolve; });
+      document.body.append(frame);
+      try {
+        await loaded;
+        const body = frame.contentDocument?.body;
+        if (!body) throw new Error("生成图片失败");
+        const url = await toPng(body, { width: SHARE_CARD_WIDTH, height: SHARE_CARD_HEIGHT, pixelRatio: 2 });
+        Object.assign(document.createElement("a"), { href: url, download: "求职战绩.png" }).click();
+        toast.success("图片已开始下载");
+      } finally {
+        frame.remove();
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存失败");

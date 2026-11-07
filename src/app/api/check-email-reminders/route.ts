@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/session";
-import { checkAndSendOnLaunch } from "@/lib/actions/reminder-digest";
+import { checkAndSendOnLaunch } from "@/lib/reminder-digest-core";
 
 export async function POST() {
   const user = await requireUser();

@@ -40,6 +40,7 @@ export const AGENT_TOOLS: ToolSpec[] = [
   { name: "get_position", description: "读候选池里一个岗位的完整 JD、地点、截止、薪资和 AI 匹配分析。比较岗位、判断值不值得投前用。", parameters: { type: "object", properties: { positionId: str("[岗位ID]") }, required: ["positionId"] } },
   { name: "resume_context", description: "读简历内容摘要（不填 resumeId 读默认简历）。做匹配分析、写材料前用。", parameters: { type: "object", properties: { resumeId: str("[简历ID]，可留空") } } },
   { name: "research_web", description: "联网查公开信息（公司近况、岗位要求、面经、薪资口碑），返回带来源链接的结论。不要在问题里写用户的姓名、电话、简历内容。", parameters: { type: "object", properties: { question: str("要查证的具体问题") }, required: ["question"] } },
+  { name: "find_jobs", description: "到公司招聘官网找实时在招的岗位（字节/腾讯/阿里/美团等），自动去掉用户已记过的，意向城市优先。", parameters: { type: "object", properties: { keywords: str("1-3 个关键词，可带公司名，如「产品经理」「字节 数据分析」") }, required: ["keywords"] } },
   { name: "read_webpage", description: "读一个公开网页的正文（岗位详情页、招聘公告）。很多招聘站是动态加载的，读不到正文时改用 research_web。", parameters: { type: "object", properties: { url: str("http(s) 链接") }, required: ["url"] } },
   { name: "prepare_application", description: "为候选池里的一个岗位准备投递：缺项清单、可用简历、网申入口。", parameters: { type: "object", properties: { positionId: str("[岗位ID]") }, required: ["positionId"] } },
   { name: "list_missing_cities", description: "列出没写工作城市的投递，和城市只是按公司推测的投递（带投递ID）。他要你补城市、查工作地点时先用这个。", parameters: { type: "object", properties: {} } },
@@ -62,7 +63,7 @@ export const AGENT_TOOLS: ToolSpec[] = [
 
 const TOOL_LABELS: Record<string, string> = {
   search_records: "查记录", filter_applications: "筛选投递记录", get_workspace_overview: "读全库模块数据", get_application: "看投递详情", get_position: "看岗位 JD", resume_context: "读简历",
-  research_web: "联网研究", read_webpage: "读网页", prepare_application: "准备投递",
+  research_web: "联网研究", find_jobs: "到官网找岗位", read_webpage: "读网页", prepare_application: "准备投递",
   list_missing_cities: "看哪些投递没写城市", research_cities: "联网查工作城市", recall_conversations: "翻以前的对话", remember: "记住", forget: "忘掉一条记忆", update_plan: "更新求职计划", propose_actions: "提出操作",
 };
 
@@ -118,6 +119,10 @@ export async function executeTool(userId: string, call: ToolCall, proposed: Assi
     }
     case "research_web": {
       const result = await executeAgentTool(userId, { tool: "research_web", query: text(call.args.question, 600), targetId: "" });
+      return { content: result.data, label, summary: result.summary };
+    }
+    case "find_jobs": {
+      const result = await executeAgentTool(userId, { tool: "find_jobs", query: text(call.args.keywords, 100), targetId: "" });
       return { content: result.data, label, summary: result.summary };
     }
     case "prepare_application": {

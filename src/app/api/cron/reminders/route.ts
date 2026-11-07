@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { findStaleApplications, findUpcomingPositionDeadlines } from "@/lib/reminders";
 import { sendReminderDigestEmail } from "@/lib/email";
+import { scanInboxOnLaunch } from "@/lib/inbox-scan-core";
+
+// Stops starting new mailbox scans here; Vercel cuts the function at maxDuration.
+export const maxDuration = 60;
+const SCAN_BUDGET_MS = 45_000;
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -38,5 +43,16 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ usersChecked: users.length, emailsSent: sent });
+  // The desktop app scans from its tray timer; here the daily job stands in.
+  // Mail on the cloud build is read at most once a day (or by 立即检查).
+  const scanners = await db.mailAccount.findMany({ where: { enabled: true }, distinct: ["userId"], select: { userId: true } });
+  const started = Date.now();
+  let scanned = 0;
+  for (const { userId } of scanners) {
+    if (Date.now() - started > SCAN_BUDGET_MS) break;
+    await scanInboxOnLaunch(userId);
+    scanned++;
+  }
+
+  return NextResponse.json({ usersChecked: users.length, emailsSent: sent, inboxesScanned: scanned, inboxesPending: scanners.length - scanned });
 }

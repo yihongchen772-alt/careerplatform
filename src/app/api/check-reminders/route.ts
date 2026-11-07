@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/session";
-import { checkAndSendOnLaunch } from "@/lib/actions/reminder-digest";
-import { scanInboxOnLaunch } from "@/lib/actions/inbox-scan";
+import { checkAndSendOnLaunch } from "@/lib/reminder-digest-core";
+import { scanInboxOnLaunch } from "@/lib/inbox-scan-core";
 
 // Electron's main process hits this once per app launch, after the Next
 // server is confirmed up. Not tied to any UI — this is how the local build

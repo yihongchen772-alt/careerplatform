@@ -370,13 +370,23 @@ export function TailorWorkbench({
     try {
       await flush();
       const html = format === "pdf" ? renderResumeHtml(docRef.current, fileBase) : renderResumeWord(docRef.current, fileBase);
-      if (window.desktopBridge?.exportDocument) {
-        await window.desktopBridge.exportDocument({ format, html, fileName: fileBase });
-        toast.success(`已导出到「下载」文件夹（${format === "pdf" ? "PDF" : "Word .doc，可以用 Word / WPS 继续改"}）`);
+      if (format === "pdf") {
+        // Browsers have no silent PDF export, so this opens the print dialog:
+        // the page's own @page rules give the same layout, 另存为 PDF saves it.
+        const frame = document.createElement("iframe");
+        frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+        frame.srcdoc = html;
+        frame.onload = () => {
+          frame.contentWindow?.focus();
+          frame.contentWindow?.print();
+          window.setTimeout(() => frame.remove(), 60_000);
+        };
+        document.body.append(frame);
+        toast.success("在打印窗口里选「另存为 PDF」即可");
       } else {
-        const blob = new Blob([html], { type: format === "pdf" ? "text/html" : "application/msword" });
+        const blob = new Blob([html], { type: "application/msword" });
         const url = URL.createObjectURL(blob);
-        Object.assign(document.createElement("a"), { href: url, download: `${fileBase}.${format === "pdf" ? "html" : "doc"}` }).click();
+        Object.assign(document.createElement("a"), { href: url, download: `${fileBase}.doc` }).click();
         URL.revokeObjectURL(url);
       }
     } catch (err) {

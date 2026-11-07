@@ -152,7 +152,7 @@ export function shareCardBody(stats: ShareStats, options: ShareCardOptions): str
     ${bars.map((row) => `<div class="row"><span class="name">${esc(row.name)}</span><span class="bar"><i style="width:${Math.max(row.share, row.share > 0 ? 3 : 0)}%;background:${row.color}"></i></span><span class="val">${esc(row.value)}</span></div>`).join("") || `<div class="row" style="color:#9a937b">还没有投递记录</div>`}
   </div>
   ${offerLine}
-  <div class="foot"><span>求职罗盘</span><span>数据只存在我自己的电脑</span></div>
+  <div class="foot"><span>求职罗盘</span><span>求职进度一目了然</span></div>
 </div>`;
 }
 
