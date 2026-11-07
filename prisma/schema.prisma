@@ -3,8 +3,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations hold a session-level advisory lock, which a pooled connection
+  // can't keep; going through the pooler made deploys fail with P1002.
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 // ---------- Auth (NextAuth / Auth.js) ----------
