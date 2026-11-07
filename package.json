@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma migrate deploy && next build",
+    "build": "if [ \"$VERCEL_ENV\" = \"preview\" ]; then next build; else prisma migrate deploy && next build; fi",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate"
