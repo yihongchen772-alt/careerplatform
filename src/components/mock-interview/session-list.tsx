@@ -18,6 +18,7 @@ export type SessionRow = {
   label: string;
   resumeName: string;
   status: "ACTIVE" | "ENDED";
+  createdAt: string;
 };
 
 export function MockInterviewSessionList({ sessions }: { sessions: SessionRow[] }) {
@@ -64,13 +65,20 @@ function SessionRowItem({ session }: { session: SessionRow }) {
           className="h-8"
           autoFocus
         />
-        <Button size="icon" className="size-8 shrink-0" disabled={busy} onClick={handleRename}>
+        <Button
+          size="icon"
+          className="size-8 shrink-0"
+          aria-label="保存名称"
+          disabled={busy}
+          onClick={handleRename}
+        >
           <Check className="size-4" />
         </Button>
         <Button
           size="icon"
           variant="ghost"
           className="size-8 shrink-0"
+          aria-label="取消重命名"
           onClick={() => {
             setName(session.label);
             setRenaming(false);
@@ -89,10 +97,11 @@ function SessionRowItem({ session }: { session: SessionRow }) {
         <span className="truncate">
           {session.label} · {session.resumeName}
         </span>
+        <span className="shrink-0 text-xs text-muted-foreground">{new Date(session.createdAt).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}</span>
       </Link>
       <div className="flex shrink-0 items-center gap-1">
         <Badge variant={session.status === "ENDED" ? "secondary" : "outline"}>
-          {session.status === "ENDED" ? "已结束" : "进行中"}
+          {session.status === "ENDED" ? "已结束" : "没做完 · 点开继续"}
         </Badge>
         <Button
           type="button"

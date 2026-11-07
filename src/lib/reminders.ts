@@ -1,12 +1,14 @@
 import type { ApplicationStage } from "@prisma/client";
 
-const TERMINAL_STAGES: ApplicationStage[] = ["REJECTED", "ACCEPTED", "DECLINED"];
+const TERMINAL_STAGES: ApplicationStage[] = ["REJECTED", "ACCEPTED", "DECLINED", "WITHDRAWN", "CANCELLED"];
 
 const STALE_THRESHOLD_DAYS = 14;
 const UPCOMING_DEADLINE_DAYS = 5;
 
+// A 投递 recorded between 00:00 and 08:00 (China) is dated 08:00 that day (a
+// date at UTC midnight), still ahead of now: that is today, never 「-1 天」.
 export function daysSince(date: Date): number {
-  return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24)));
 }
 
 export function daysUntil(date: Date): number {

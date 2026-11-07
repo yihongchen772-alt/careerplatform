@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { STAGE_BADGE_VARIANT, STAGE_LABELS } from "@/lib/stage-labels";
 import { OfferCompareTable, type OfferRow } from "@/components/compare/offer-compare-table";
+import { OfferAnalysisDialog } from "@/components/compare/offer-analysis-dialog";
+import { PageHero } from "@/components/layout/page-hero";
 
 export default async function ComparePage() {
   const user = await requireUser();
@@ -27,12 +29,7 @@ export default async function ComparePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Offer 对比</h1>
-        <p className="text-sm text-muted-foreground">
-          汇总所有拿到 offer 或已接受的投递，方便横向比较
-        </p>
-      </div>
+      <PageHero title="Offer 对比" icon={Scale} description="汇总所有拿到 offer 或已接受的投递，方便横向比较" />
 
       {applications.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-16 text-center text-muted-foreground">
@@ -64,8 +61,8 @@ export default async function ComparePage() {
                   overtimeNote: app.overtimeNote,
                   growthNote: app.growthNote,
                   offerNote: app.offerNote,
-                  offerDate: offerStage?.enteredAt.toLocaleDateString() ?? null,
-                  decideBy: offerStage?.nextDeadline?.toLocaleDateString() ?? null,
+                  offerDate: offerStage?.enteredAt.toLocaleDateString("zh-CN") ?? null,
+                  decideBy: offerStage?.nextDeadline?.toLocaleDateString("zh-CN") ?? null,
                 };
               })}
             />
@@ -111,26 +108,32 @@ export default async function ComparePage() {
                   {offerStage && (
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground">拿到日期</span>
-                      <span>{offerStage.enteredAt.toLocaleDateString()}</span>
+                      <span>{offerStage.enteredAt.toLocaleDateString("zh-CN")}</span>
                     </div>
                   )}
                   {offerStage?.nextDeadline && (
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground">决策截止</span>
                       <span className="text-destructive">
-                        {offerStage.nextDeadline.toLocaleDateString()}
+                        {offerStage.nextDeadline.toLocaleDateString("zh-CN")}
                       </span>
                     </div>
                   )}
                   {app.offerNote && (
                     <p className="text-muted-foreground">{app.offerNote}</p>
                   )}
-                  <Link
-                    href={`/applications/${app.id}`}
-                    className="block text-primary underline underline-offset-4"
-                  >
-                    查看详情
-                  </Link>
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <Link
+                      href={`/applications/${app.id}`}
+                      className="text-primary underline underline-offset-4"
+                    >
+                      查看详情
+                    </Link>
+                    <OfferAnalysisDialog
+                      applicationId={app.id}
+                      offerLabel={`${app.company.name} · ${app.title}`}
+                    />
+                  </div>
                 </CardContent>
               </Card>
             );

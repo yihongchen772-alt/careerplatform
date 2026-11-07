@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { del } from "@vercel/blob";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
+import { deleteLocalFileByUrl } from "@/lib/local-storage";
+import { extractResumeContent } from "@/lib/resume-extract";
 import { resumeVersionSchema } from "@/lib/validation";
 import { z } from "zod";
 
@@ -14,7 +15,7 @@ export async function createResumeVersion(
   const user = await requireUser();
   const data = resumeVersionSchema.parse(input);
 
-  await db.resumeVersion.create({
+  const created = await db.resumeVersion.create({
     data: {
       userId: user.id,
       name: data.name,
@@ -22,6 +23,12 @@ export async function createResumeVersion(
       targetTrack: data.targetTrack,
     },
   });
+
+  // Fire-and-forget: warms the 网申自动填充 content cache right away so the
+  // first autofill run on this resume doesn't also have to pay for this —
+  // never blocks the upload, and silently no-ops on any failure (no AI key
+  // configured yet, etc.).
+  if (created.fileUrl) void extractResumeContent(user.id, created.id);
 
   revalidatePath("/resumes");
 }
@@ -45,23 +52,32 @@ export async function updateResumeVersion(
       name: data.name,
       fileUrl: data.fileUrl ?? existing.fileUrl,
       targetTrack: data.targetTrack,
-      // A re-uploaded file invalidates any cached AI review of the old one.
+      // A re-uploaded file invalidates any cached AI review/extraction of
+      // the old one.
       ...(replacingFile && {
         checkScore: null,
         checkResult: Prisma.JsonNull,
         checkedAt: null,
+        extractedText: null,
+        extractedAt: null,
+        // The 定制 底稿 was read from the old file.
+        structured: Prisma.JsonNull,
+        structuredAt: null,
       }),
     },
   });
+  // A file of the user's own now: 更新简历版本 from a 定制 must no longer print over it.
+  if (replacingFile) await db.resumeTailoring.updateMany({ where: { userId: user.id, savedVersionId: id }, data: { savedVersionId: null } });
 
-  // Best-effort: drop the superseded file so it doesn't leak in Blob storage
-  // the same way deleteResumeVersion used to.
+  // Fire-and-forget, same reasoning as createResumeVersion: re-warm the
+  // content cache for the new file right away rather than waiting for the
+  // next autofill run to pay for it.
+  if (replacingFile && data.fileUrl) void extractResumeContent(user.id, id);
+
+  // Best-effort: drop the superseded file so it doesn't leak on disk the
+  // same way deleteResumeVersion used to.
   if (replacingFile && existing.fileUrl) {
-    try {
-      await del(existing.fileUrl);
-    } catch {
-      // already gone, or transient — nothing left to roll back
-    }
+    await deleteLocalFileByUrl(existing.fileUrl);
   }
 
   revalidatePath("/resumes");
@@ -73,15 +89,19 @@ export async function deleteResumeVersion(id: string) {
   const resume = await db.resumeVersion.findFirst({ where: { id, userId: user.id } });
   if (!resume) return;
 
-  await db.resumeVersion.delete({ where: { id } });
-  // The PDF was never cleaned up here — every deleted version leaked its file
-  // in Blob storage indefinitely. Best-effort: the DB row is already gone.
+  await db.$transaction([
+    // AI-only drafts are specific to this resume. User-confirmed answers
+    // survive through the nullable SET NULL relation as reusable memory.
+    db.autofillAnswer.deleteMany({ where: { resumeVersionId: id, confirmed: false } }),
+    db.resumeVersion.delete({ where: { id } }),
+  ]);
+  // Deleting the default leaves forms with none: the newest one takes over.
+  if (resume.isDefault) {
+    const next = await db.resumeVersion.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, select: { id: true } });
+    if (next) await db.resumeVersion.update({ where: { id: next.id }, data: { isDefault: true } });
+  }
   if (resume.fileUrl) {
-    try {
-      await del(resume.fileUrl);
-    } catch {
-      // already gone, or transient — nothing left to roll back
-    }
+    await deleteLocalFileByUrl(resume.fileUrl);
   }
 
   revalidatePath("/resumes");

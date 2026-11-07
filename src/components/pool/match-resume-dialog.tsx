@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { FileSearch } from "lucide-react";
+import Link from "next/link";
+import { FileSearch, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,7 +15,28 @@ import {
 import {
   matchResumesToPosition,
   type MatchResult,
+  type ResumeMatch,
 } from "@/lib/actions/resume-match";
+import {
+  generateResumeTailoring,
+  type ResumeTailoring,
+} from "@/lib/actions/resume-tailoring";
+
+const RECOMMENDATION_VARIANT: Record<
+  ResumeMatch["recommendation"],
+  "default" | "secondary" | "outline" | "destructive"
+> = {
+  强烈建议投: "default",
+  可以投: "secondary",
+  海投备用: "outline",
+  不建议浪费时间: "destructive",
+};
+
+const VERDICT_ICON: Record<ResumeMatch["breakdown"][number]["verdict"], string> = {
+  match: "✅",
+  partial: "⚠️",
+  missing: "❌",
+};
 
 export function MatchResumeDialog({
   positionId,
@@ -29,6 +51,8 @@ export function MatchResumeDialog({
 }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MatchResult | null>(null);
+  const [tailoring, setTailoring] = useState<Record<string, ResumeTailoring>>({});
+  const [tailoringId, setTailoringId] = useState<string | null>(null);
 
   async function run() {
     setLoading(true);
@@ -38,6 +62,17 @@ export function MatchResumeDialog({
       else toast.error(res.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runTailoring(resumeVersionId: string) {
+    setTailoringId(resumeVersionId);
+    try {
+      const res = await generateResumeTailoring(positionId, resumeVersionId);
+      if (res.ok) setTailoring((prev) => ({ ...prev, [resumeVersionId]: res.data }));
+      else toast.error(res.message);
+    } finally {
+      setTailoringId(null);
     }
   }
 
@@ -72,34 +107,85 @@ export function MatchResumeDialog({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{m.resumeName}</span>
                   {i === 0 && <Badge>推荐</Badge>}
+                  <Badge variant={RECOMMENDATION_VARIANT[m.recommendation]}>
+                    {m.recommendation}
+                  </Badge>
                   <span className="ml-auto text-lg font-semibold tabular-nums">
                     {m.matchScore}
                   </span>
                 </div>
 
-                {m.matchedPoints.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">对得上的点</p>
-                    <ul className="list-inside list-disc text-sm">
-                      {m.matchedPoints.map((p, j) => (
-                        <li key={j}>{p}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {m.gaps.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">差距</p>
-                    <ul className="list-inside list-disc text-sm text-muted-foreground">
-                      {m.gaps.map((g, j) => (
-                        <li key={j}>{g}</li>
-                      ))}
-                    </ul>
+                {m.breakdown.length > 0 && (
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                          <th className="px-2 py-1.5 font-medium">JD 要求</th>
+                          <th className="px-2 py-1.5 font-medium">简历里的证据</th>
+                          <th className="w-8 px-2 py-1.5 font-medium"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {m.breakdown.map((row, j) => (
+                          <tr key={j} className="border-b last:border-b-0">
+                            <td className="px-2 py-1.5 align-top">{row.requirement}</td>
+                            <td className="px-2 py-1.5 align-top text-muted-foreground">
+                              {row.evidence}
+                            </td>
+                            <td className="px-2 py-1.5 text-center align-top">
+                              {VERDICT_ICON[row.verdict]}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
 
                 <p className="text-sm">{m.suggestion}</p>
+                <Link
+                  href={`/resumes/tailor?positionId=${encodeURIComponent(positionId)}&resumeVersionId=${encodeURIComponent(m.resumeVersionId)}`}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                >
+                  <FileText className="size-3.5" />
+                  生成整份定制简历（可编辑，导出 PDF / Word）
+                </Link>
+
+                {!tailoring[m.resumeVersionId] ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs"
+                    disabled={tailoringId === m.resumeVersionId}
+                    onClick={() => runTailoring(m.resumeVersionId)}
+                  >
+                    {tailoringId === m.resumeVersionId ? "生成改写建议中..." : "改简历"}
+                  </Button>
+                ) : (
+                  <div className="space-y-2 rounded-md bg-muted/40 p-2">
+                    <p className="text-xs text-muted-foreground">
+                      {tailoring[m.resumeVersionId].summary}
+                    </p>
+                    <div className="space-y-2">
+                      {tailoring[m.resumeVersionId].rewrites.map((r, j) => (
+                        <div key={j} className="space-y-1 border-b pb-2 text-xs last:border-0 last:pb-0">
+                          <p className="text-muted-foreground line-through">{r.original}</p>
+                          <p className="font-medium">{r.suggested}</p>
+                          <p className="text-muted-foreground">{r.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-xs"
+                      disabled={tailoringId === m.resumeVersionId}
+                      onClick={() => runTailoring(m.resumeVersionId)}
+                    >
+                      {tailoringId === m.resumeVersionId ? "重新生成中..." : "重新生成"}
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
 

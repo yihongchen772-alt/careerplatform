@@ -5,6 +5,8 @@ import {
   findUpcomingPositionDeadlines,
   isTerminalStage,
 } from "@/lib/reminders";
+import { relativeText, stepState, waitingText, whenText } from "@/lib/interview-schedule";
+import { STAGE_LABELS } from "@/lib/stage-labels";
 
 export type TodoUrgency = "overdue" | "urgent" | "soon";
 
@@ -16,6 +18,8 @@ export type Todo = {
   href: string;
   /** Lower sorts first. */
   order: number;
+  /** A 投递 with no news for this many days (shown folded together on 总览). */
+  staleDays?: number;
 };
 
 const NEXT_STEP_WINDOW_DAYS = 7;
@@ -44,12 +48,19 @@ type TodoPosition = {
 type TodoStageHistory = {
   id: string;
   stage: ApplicationStage;
+  enteredAt?: Date;
   nextDeadline: Date | null;
   nextDeadlineEnd: Date | null;
+  /** nextDeadline is a clock time (面试 at 14:00), not a day. */
+  nextHasTime?: boolean;
+  stageLabel?: string | null;
+  completedAt?: Date | null;
+  followedUpAt?: Date | null;
   application: {
     id: string;
     title: string;
     currentStage: ApplicationStage;
+    currentStageDate?: Date;
     company: { name: string };
   };
 };
@@ -116,9 +127,22 @@ export function buildTodos(
   positions: TodoPosition[],
   stageHistories: TodoStageHistory[],
   personalTasks: TodoPersonalTask[] = [],
-  contacts: TodoContact[] = []
+  contacts: TodoContact[] = [],
+  calendarEvents: { id: string; title: string; startsAt: Date; endsAt?: Date | null; allDay?: boolean; dateKey?: string; timeZone?: string; stageHistoryId?: string | null }[] = []
 ): Todo[] {
   const todos: Todo[] = [];
+  for (const event of calendarEvents) {
+    // The calendar copy of a 投递 step; the step itself is listed below.
+    if (event.stageHistoryId) continue;
+    let timezone = event.timeZone || "UTC";
+    try { new Intl.DateTimeFormat("en", { timeZone: timezone }).format(event.startsAt); } catch { timezone = "UTC"; }
+    const todayParts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map((p) => [p.type, p.value]));
+    const today = `${todayParts.year}-${todayParts.month}-${todayParts.day}`;
+    if (event.allDay ? (event.dateKey || "") < today : (event.endsAt || event.startsAt).getTime() < Date.now()) continue;
+    const daysLeft = daysUntil(event.startsAt); if (daysLeft > NEXT_STEP_WINDOW_DAYS) continue;
+    const when = event.allDay ? event.dateKey : new Intl.DateTimeFormat("zh-CN", { timeZone: timezone, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(event.startsAt);
+    todos.push({ id: `event-${event.id}`, label: event.title, sublabel: event.allDay || timezone === Intl.DateTimeFormat().resolvedOptions().timeZone ? String(when) : `${when}（${timezone}）`, urgency: urgencyOf(daysLeft), href: `/calendar/events?id=${event.id}`, order: event.startsAt.getTime() });
+  }
 
   // User-written plans surface the same way the auto-derived ones do — due
   // today/overdue is urgent, within the window is "soon". Undated tasks
@@ -147,6 +171,7 @@ export function buildTodos(
       urgency: "overdue",
       href: `/applications/${app.id}`,
       order: -app.daysStale,
+      staleDays: app.daysStale,
     });
   }
 
@@ -162,10 +187,44 @@ export function buildTodos(
     });
   }
 
+  const now = Date.now();
   for (const h of stageHistories) {
     if (!h.nextDeadline) continue;
     // A finished application's leftover next-step date isn't actionable.
     if (isTerminalStage(h.application.currentStage)) continue;
+    // Nor is an earlier stage's: once the 投递 moved on, its old 笔试 window
+    // is history — only a booked time still ahead keeps counting.
+    const current = !h.enteredAt || !h.application.currentStageDate
+      || (h.stage === h.application.currentStage && h.enteredAt.getTime() === h.application.currentStageDate.getTime());
+    if (!current && !(h.nextHasTime && h.nextDeadline.getTime() > now)) continue;
+    // Done on the applicant's side: no deadline to chase. Quiet until it is
+    // time to follow up (the note while it is fresh is asked for by
+    // 接下来's 「刚结束」 strip, not listed here).
+    const state = stepState(h, now);
+    if (state.phase === "waiting") {
+      const round = h.stageLabel || STAGE_LABELS[h.stage];
+      const label = `${h.application.company.name} · ${h.application.title}`;
+      if (state.followUp && current) {
+        todos.push({ id: `follow-${h.id}`, label, sublabel: `${round}${waitingText(h.stage, state)}，可以发封邮件问问进度`, urgency: "soon", href: `/applications/${h.application.id}#interview`, order: -state.days });
+      }
+      continue;
+    }
+    if (h.nextHasTime) {
+      // A booked slot: urgent on its day, with the clock time in view.
+      const item = { startsAt: h.nextDeadline.toISOString(), endsAt: h.nextDeadlineEnd?.toISOString() ?? null, hasTime: true, kind: "interview" as const };
+      const daysLeft = daysUntil(h.nextDeadline);
+      if (daysLeft > NEXT_STEP_WINDOW_DAYS) continue;
+      const over = h.nextDeadline.getTime() < now;
+      todos.push({
+        id: `next-${h.id}`,
+        label: `${h.application.company.name} · ${h.application.title}`,
+        sublabel: over ? `${whenText(item, now)} 已结束，记得更新进度` : `${whenText(item, now)} · ${relativeText(item, now)}`,
+        urgency: over ? "overdue" : urgencyOf(daysLeft),
+        href: `/applications/${h.application.id}`,
+        order: daysLeft,
+      });
+      continue;
+    }
     const { urgencyDate, note } = windowStatus(h.nextDeadline, h.nextDeadlineEnd);
     const daysLeft = daysUntil(urgencyDate);
     if (daysLeft > NEXT_STEP_WINDOW_DAYS) continue;

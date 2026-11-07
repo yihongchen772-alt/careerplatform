@@ -43,7 +43,7 @@ export function ExportDataButton() {
         <CardTitle>导出我的数据</CardTitle>
         <CardDescription>
           把你在这里的岗位、投递记录、简历版本、日程、联系人、题库、模拟面试等全部数据打包成一个 JSON
-          文件下载下来，自己留一份备份。这个文件也能直接导入桌面版（本地单机版）的"恢复备份"，把网页版的数据搬到桌面版上用。
+          文件下载下来，自己留一份备份。这个文件也能导入桌面版的「恢复备份」，把云端的数据搬到桌面版上用。密码和密钥不会导出。
         </CardDescription>
       </CardHeader>
       <CardContent>

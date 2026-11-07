@@ -1,0 +1,177 @@
+import { parseCalendarInvite, type MailEventDraft } from "@/lib/mail-calendar";
+import { ImapFlow } from "imapflow";
+import { simpleParser } from "mailparser";
+import { db } from "@/lib/db";
+import { decryptSecret } from "@/lib/crypto";
+import { UserFacingError } from "@/lib/action-result";
+import { unseenUids } from "@/lib/inbox-identity";
+import { bodyTextOf } from "@/lib/mail-html-text";
+
+export type InboxEmail = {
+  uid: number;
+  subject: string;
+  from: string;
+  date: Date;
+  /** Plain-text snippet only — not the full body, to keep AI calls cheap and
+   * limit how much of the user's mail content leaves the machine. */
+  snippet: string;
+  calendarInvite?: MailEventDraft | null;
+};
+
+export type ImapConfig = {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+};
+
+/** One inbox to scan, decrypted and ready to connect. */
+export type ScanAccount = ImapConfig & {
+  id: string;
+  /** Display label for wherever a scan result needs to say which inbox it
+   * came from — the user-given label, falling back to the address itself. */
+  label: string;
+};
+
+/** Every enabled inbox for this user — a recruiter's required mailbox
+ * (QQ/163/Gmail/...) varies per company, so scanning has to cover several
+ * at once rather than assuming one mailbox catches everything. */
+export async function getUserScanAccounts(userId: string): Promise<ScanAccount[]> {
+  const accounts = await db.mailAccount.findMany({
+    where: { userId, enabled: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return accounts.map((a) => ({
+    id: a.id,
+    label: a.label || a.email,
+    host: a.imapHost,
+    port: a.imapPort,
+    user: a.email,
+    password: decryptSecret(a.passwordEncrypted),
+  }));
+}
+
+
+type FetchedMessage = { uid: number; source?: Buffer; envelope?: { subject?: string; from?: { address?: string }[]; date?: Date } };
+
+async function toInboxEmail(message: FetchedMessage): Promise<InboxEmail> {
+  const parsed = message.source ? await simpleParser(message.source) : null;
+  // HTML-only mail (most recruiting systems) has no plain text: read its HTML.
+  const bodyText = bodyTextOf(parsed?.text, parsed?.html);
+  return {
+    uid: message.uid,
+    subject: message.envelope?.subject ?? "(无主题)",
+    from: message.envelope?.from?.[0]?.address ?? "",
+    date: message.envelope?.date ?? new Date(),
+    snippet: bodyText.slice(0, 12000),
+    calendarInvite: parsed?.attachments?.filter((a) => a.contentType === "text/calendar" || /\.ics$/i.test(a.filename || "")).slice(0, 1).map((a) => a.size < 1024 * 1024 ? (() => { try { return parseCalendarInvite(a.content.toString("utf8")); } catch { return null; } })() : null)[0] || null,
+  };
+}
+
+async function connect(config: ImapConfig): Promise<ImapFlow> {
+  const client = new ImapFlow({
+    host: config.host,
+    port: config.port,
+    secure: true,
+    auth: { user: config.user, pass: config.password },
+    logger: false,
+  });
+  try {
+    await client.connect();
+  } catch (err) {
+    console.error("[imap] connect failed", err);
+    // Told apart so the 「自动读邮件停了」 notice can say what to do.
+    throw new UserFacingError(
+      (err as { authenticationFailed?: boolean })?.authenticationFailed
+        ? "邮箱拒绝登录：授权码可能过期或被重置了，去邮箱网页版重新生成一个填进来"
+        : "连不上邮箱服务器，检查一下网络和 IMAP 地址、端口"
+    );
+  }
+  return client;
+}
+
+/**
+ * Read-only: the given messages again, by UID — to read a mail a second time
+ * (a time the first reading missed). Nothing is marked, moved or deleted.
+ */
+export async function fetchEmailsByUid(config: ImapConfig, uids: number[]): Promise<InboxEmail[]> {
+  const wanted = Array.from(new Set(uids.filter((uid) => Number.isSafeInteger(uid) && uid > 0))).slice(0, 60);
+  if (!wanted.length) return [];
+  const client = await connect(config);
+  const results: InboxEmail[] = [];
+  try {
+    const lock = await client.getMailboxLock("INBOX");
+    try {
+      for await (const message of client.fetch(wanted, { envelope: true, source: true }, { uid: true })) results.push(await toInboxEmail(message));
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout().catch(() => {});
+  }
+  return results;
+}
+
+const MAX_EMAILS_PER_CHECK = 20;
+
+/**
+ * Read-only: fetches recent inbox messages, never marks, moves, or deletes
+ * anything. Capped at MAX_EMAILS_PER_CHECK so a mailbox with a big backlog
+ * on first-ever setup doesn't trigger dozens of AI calls in one check.
+ *
+ * `sinceUid`, when known, is what actually prevents duplicates: IMAP's
+ * SEARCH SINCE date filter only has day granularity (no time-of-day), so
+ * two scans on the same calendar day both re-match every message since
+ * midnight — including ones a scan earlier that same day already turned
+ * into a 待办. UIDs are stable and strictly increasing within one mailbox,
+ * so "uid > sinceUid" never re-matches an already-seen message no matter
+ * how many times per day this runs. `since` is only the fallback for the
+ * very first scan, when there's no UID cursor yet — it bounds "look back a
+ * few days" instead of scanning the entire mailbox history.
+ */
+export async function fetchRecentEmails(
+  config: ImapConfig,
+  since: Date,
+  sinceUid?: number | null
+): Promise<InboxEmail[]> {
+  const client = await connect(config);
+
+  const results: InboxEmail[] = [];
+  try {
+    const lock = await client.getMailboxLock("INBOX");
+    try {
+      const uids = await client.search(
+        sinceUid ? { uid: `${sinceUid + 1}:*` } : { since },
+        { uid: true }
+      );
+      // A mailbox can have a backlog much larger than one check. Process the
+      // oldest matching UIDs first so advancing the cursor never jumps over
+      // mail that is still waiting for classification.
+      const recentUids = unseenUids(Array.isArray(uids) ? uids : [], sinceUid).slice(0, MAX_EMAILS_PER_CHECK);
+
+      // `{ uid: true }` MUST be the third (options) argument, not part of the
+      // second (query) argument. In the query it only means "also return the
+      // uid field"; the range itself is then read as *sequence numbers*. Since
+      // UIDs keep climbing as mail is deleted, they run past the message count
+      // (measured: UIDs ~2600 in a 2184-message mailbox) so every fetch matched
+      // nothing and the scan silently reported "0 new emails" — it had never
+      // once worked before this fix.
+      for await (const message of client.fetch(
+        recentUids,
+        { envelope: true, source: true },
+        { uid: true }
+      )) {
+        results.push(await toInboxEmail(message));
+      }
+      // ImapFlow normally yields in UID order, but keep the contract explicit
+      // for callers that use the result as a cursor-ordered batch.
+      results.sort((a, b) => a.uid - b.uid);
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout().catch(() => {});
+  }
+
+  return results;
+}

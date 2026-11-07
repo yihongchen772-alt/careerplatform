@@ -1,0 +1,103 @@
+/**
+ * Plain module, deliberately not "use server": a "use server" file may only
+ * export async functions, so the type and the default object can't live in
+ * the action file alongside them.
+ *
+ * These are the settings Electron's main process needs to act on (tray
+ * behaviour, launch-at-login, the background reminder timer). They're kept
+ * in a JSON file next to the database rather than in the database itself
+ * because the main process has no Prisma client — only the filesystem.
+ */
+export type AppSettings = {
+  /** Start the app automatically when the computer starts. */
+  autoLaunch: boolean;
+  /** Open the standalone desktop note when macOS or Windows signs in. */
+  notesAtLogin: boolean;
+  /** Keep running in the tray after the window is closed, so reminders can fire. */
+  backgroundReminders: boolean;
+  /**
+   * How often, in hours, the background process re-scans the inbox. 0 means
+   * "only when the app starts" — the original behaviour. Only has any effect
+   * with backgroundReminders on, since nothing is running otherwise.
+   */
+  inboxScanIntervalHours?: number;
+  /**
+   * How often, in hours, the background process re-checks saved companies'
+   * career pages for new/changed job postings ("岗位雷达"). 0 disables it entirely —
+   * unlike the inbox scan, there is no "check once on launch" fallback here,
+   * since polling someone else's website even once without being asked
+   * would be a surprise.
+   */
+  jobRadarIntervalHours?: number;
+  /**
+   * How often, in hours, the background process re-reads each company's
+   * candidate portal ("我的投递" page, set from the 网申浏览器) and moves
+   * matching applications forward on the board ("网申进度同步"). 0 disables
+   * it, same reasoning as the radar: it loads someone else's site using
+   * the user's own login, so it never runs unless asked.
+   */
+  applicationSyncIntervalHours?: number;
+  /**
+   * How often, in hours, the App checks subscribed 校招信息表 (秋招信息库) for
+   * changes while it runs. Unset means 1: the user subscribed on purpose, and
+   * a check is one small request. 0 = only when 秋招信息库 is opened.
+   */
+  postingSheetIntervalHours?: number;
+  /**
+   * Written by the Electron main process when the OS refused to register the
+   * login item (sandboxing, MDM policy, unsigned build). Read-only from the
+   * app's side — it exists so a silently-ignored setting shows up as a
+   * warning instead of a checkbox that looks on but does nothing.
+   */
+  autoLaunchFailed?: boolean;
+  /**
+   * HTTP proxy for outbound AI calls (`http://host:port`) — plain fetch()
+   * inside the Next server's Node process does not pick up whatever system
+   * proxy/VPN the user has running, even though a browser or the Electron
+   * window itself would. Someone whose network needs a proxy to reach
+   * Gemini/OpenAI/Anthropic at all would otherwise see every call to those
+   * silently hang until timeout, no matter how well their VPN works for
+   * everything else. Undici's ProxyAgent only speaks HTTP CONNECT, not
+   * SOCKS5 — the user needs their proxy tool's HTTP(S) port specifically.
+   */
+  proxyUrl?: string;
+};
+
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  autoLaunch: false,
+  notesAtLogin: false,
+  backgroundReminders: false,
+  inboxScanIntervalHours: 0,
+  jobRadarIntervalHours: 0,
+  applicationSyncIntervalHours: 0,
+};
+
+/** Options offered in settings; 0 keeps the launch-only behaviour. */
+export const SCAN_INTERVAL_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: "只在打开 App 时扫一次" },
+  { value: 1, label: "每 1 小时" },
+  { value: 2, label: "每 2 小时" },
+  { value: 4, label: "每 4 小时" },
+  { value: 6, label: "每 6 小时" },
+  { value: 12, label: "每 12 小时" },
+];
+
+/**
+ * Fewer, longer options than SCAN_INTERVAL_OPTIONS on purpose: this hits an
+ * external site the user doesn't control, so nothing here defaults to
+ * checking more than once every 6 hours, and 0 means "off" rather than
+ * "once on launch" (see jobRadarIntervalHours above).
+ */
+export const POSTING_SHEET_INTERVAL_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: "只在打开秋招信息库时" },
+  { value: 1, label: "每 1 小时" },
+  { value: 3, label: "每 3 小时" },
+  { value: 6, label: "每 6 小时" },
+];
+
+export const RADAR_INTERVAL_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: "不自动检查" },
+  { value: 6, label: "每 6 小时" },
+  { value: 12, label: "每 12 小时" },
+  { value: 24, label: "每 24 小时" },
+];

@@ -1,249 +1,143 @@
 "use server";
+import { terminationFields } from "@/lib/termination";
 
-import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { getUserAiConfig, callTextAi } from "@/lib/ai-providers";
-import { buildTodos } from "@/lib/todos";
 import { STAGE_LABELS } from "@/lib/stage-labels";
 import { applicationStageValues } from "@/lib/validation";
 import { computeInterestScore } from "@/lib/scoring";
+import { resolveCompanyId } from "@/lib/company-resolver";
 import { toActionResult, UserFacingError, type ActionResult } from "@/lib/action-result";
-import {
-  assistantActionSchema,
-  type AssistantAction,
-  type AssistantChatMessage,
-} from "@/lib/assistant-shared";
+import { markPositionsApplied, deletePosition } from "@/lib/actions/positions";
+import { deleteApplication, updateApplication } from "@/lib/actions/applications";
+import { toggleTaskDone } from "@/lib/actions/personal-tasks";
+import { markContacted } from "@/lib/actions/contacts";
+import { revalidateContactPaths } from "@/lib/revalidate-contacts";
+import { addCalendarItem, addStageSchedule, markFollowedUp, saveStepNote, setEventCompleted, setStageSchedule, setStepCompleted, writeMailSchedule } from "@/lib/actions/schedule";
+import { assistantActionSchema, type AssistantAction } from "@/lib/assistant-shared";
+import { parseCities } from "@/lib/application-city";
+import { closestId } from "@/lib/closest-id";
+import { currentStageRow, isTerminalStage } from "@/lib/interview-schedule";
 
-export type { AssistantAction, AssistantChatMessage };
-
-// Keep the prompt bounded — a pool/application list that's grown large over
-// a whole job-search season shouldn't blow up every single chat turn's cost.
-const MAX_ITEMS = 25;
-const MAX_HISTORY_TURNS = 8;
-
-function ymd(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-async function buildSnapshot(userId: string): Promise<string> {
-  const [profile, positions, applications, stageHistories, personalTasks, resumeVersions] =
-    await Promise.all([
-      db.user.findUnique({
-        where: { id: userId },
-        select: {
-          school: true,
-          targetTrack: true,
-          graduationYear: true,
-          skills: true,
-          preferredCities: true,
-          expectedSalaryMin: true,
-        },
-      }),
-      db.position.findMany({
-        where: { userId },
-        include: { company: true },
-        orderBy: { createdAt: "desc" },
-        take: MAX_ITEMS,
-      }),
-      db.application.findMany({
-        where: { userId },
-        include: { company: true },
-        orderBy: { appliedDate: "desc" },
-        take: MAX_ITEMS,
-      }),
-      db.stageHistory.findMany({
-        where: { application: { userId }, nextDeadline: { not: null } },
-        include: { application: { include: { company: true } } },
-      }),
-      db.personalTask.findMany({ where: { userId }, orderBy: { createdAt: "desc" } }),
-      db.resumeVersion.findMany({
-        where: { userId },
-        select: { id: true, name: true, targetTrack: true, checkScore: true, isDefault: true },
-        orderBy: { createdAt: "desc" },
-      }),
-    ]);
-
-  const todos = buildTodos(applications, positions, stageHistories, personalTasks);
-
-  const sections: string[] = [];
-
-  // Users say "下周五" / "这周三" constantly, and models are measurably bad
-  // at the arithmetic. Spelling out the next two weeks turns the conversion
-  // into a lookup instead of a calculation.
-  const now = new Date();
-  const calendar = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() + i);
-    const label = i === 0 ? "今天" : i === 1 ? "明天" : i === 2 ? "后天" : "";
-    return `${ymd(d)} 星期${"日一二三四五六"[d.getDay()]}${label ? `（${label}）` : ""}`;
-  });
-  sections.push(
-    `日期对照（相对日期一律查这张表，不要自己推算）：\n${calendar.join("\n")}\n` +
-      `"这周X"指本周内那一天，"下周X"指再往后一周的那一天。`
-  );
-
-  if (profile) {
-    const bits = [
-      profile.school ? `学校：${profile.school}` : null,
-      profile.graduationYear ? `毕业年份：${profile.graduationYear}` : null,
-      profile.targetTrack ? `目标方向：${profile.targetTrack}` : null,
-      profile.skills ? `技能：${profile.skills}` : null,
-      profile.preferredCities ? `意向城市：${profile.preferredCities}` : null,
-      profile.expectedSalaryMin ? `期望月薪下限：${profile.expectedSalaryMin}K` : null,
-    ].filter(Boolean);
-    sections.push(
-      "求职者本人：\n" + (bits.length === 0 ? "（个人资料没填，判断匹配度时说明这一点）" : bits.join("；"))
-    );
+/**
+ * Resolves a 投递 for an action: exact ID, then a 1-2 char miscopied ID
+ * (`closestId`), then by companyName (+ title) when only one matches.
+ */
+async function findApplicationForAction(userId: string, targetId?: string | null, companyName?: string | null, title?: string | null) {
+  const id = targetId?.trim() || "";
+  if (id) {
+    const exact = await db.application.findFirst({ where: { id, userId }, include: { company: { select: { name: true } } } });
+    if (exact) return exact;
+    const allIds = (await db.application.findMany({ where: { userId }, select: { id: true } })).map((row) => row.id);
+    const fixed = closestId(id, allIds);
+    if (fixed) {
+      const matched = await db.application.findFirst({ where: { id: fixed, userId }, include: { company: { select: { name: true } } } });
+      if (matched) return matched;
+    }
   }
-
-  sections.push(
-    "候选岗位池：\n" +
-      (positions.length === 0
-        ? "（空）"
-        : positions
-            .map((p) => {
-              const parts = [
-                `${p.company.name} · ${p.title}`,
-                p.track ? `方向：${p.track}` : null,
-                p.location ? `地点：${p.location}` : null,
-                p.salaryMin || p.salaryMax ? `薪资：${p.salaryMin ?? "?"}-${p.salaryMax ?? "?"}K` : null,
-                p.interestScore != null ? `综合得分：${p.interestScore}` : null,
-                p.deadline ? `截止：${ymd(p.deadline)}` : null,
-                `状态：${p.status}`,
-                p.jdText ? `JD 摘要：${p.jdText.slice(0, 300)}` : "（无 JD 正文）",
-              ].filter(Boolean);
-              return `- [岗位ID:${p.id}] ${parts.join("；")}`;
-            })
-            .join("\n"))
+  const company = (companyName?.trim() || (!/^c[a-z0-9]{15,}$/i.test(id) ? id : "")).toLowerCase();
+  if (!company) return null;
+  const candidates = await db.application.findMany({
+    where: { userId },
+    include: { company: { include: { aliases: { select: { alias: true } } } } },
+    orderBy: { appliedDate: "desc" },
+  });
+  const byCompany = candidates.filter((app) =>
+    [app.company.name, ...app.company.aliases.map((a) => a.alias)].some((n) => n.toLowerCase().includes(company) || company.includes(n.toLowerCase()))
   );
-
-  sections.push(
-    "投递记录：\n" +
-      (applications.length === 0
-        ? "（空）"
-        : applications
-            .map((a) => {
-              const parts = [
-                `${a.company.name} · ${a.title}`,
-                `阶段：${STAGE_LABELS[a.currentStage]}`,
-                `投递日期：${ymd(a.appliedDate)}`,
-                `进入当前阶段：${ymd(a.currentStageDate)}`,
-              ].filter(Boolean);
-              return `- [投递ID:${a.id}] ${parts.join("；")}`;
-            })
-            .join("\n"))
-  );
-
-  sections.push(
-    "近期待办/截止日期（按紧急程度排序）：\n" +
-      (todos.length === 0
-        ? "（没有紧急事项）"
-        : todos.map((t) => `- ${t.label}：${t.sublabel}`).join("\n"))
-  );
-
-  sections.push(
-    "简历版本：\n" +
-      (resumeVersions.length === 0
-        ? "（还没上传过简历）"
-        : resumeVersions
-            .map(
-              (r) =>
-                `- ${r.name}${r.isDefault ? "（默认）" : ""}${r.targetTrack ? `，方向：${r.targetTrack}` : ""}${r.checkScore != null ? `，AI 体检分：${r.checkScore}` : "，还没做过 AI 体检"}`
-            )
-            .join("\n"))
-  );
-
-  return sections.join("\n\n");
+  if (!byCompany.length) return null;
+  const wantedTitle = title?.trim().toLowerCase();
+  if (wantedTitle) {
+    const byTitle = byCompany.filter((app) => app.title.toLowerCase().includes(wantedTitle) || wantedTitle.includes(app.title.toLowerCase()));
+    if (byTitle.length === 1) return byTitle[0];
+  }
+  if (byCompany.length === 1) return byCompany[0];
+  const active = byCompany.filter((app) => !isTerminalStage(app.currentStage));
+  return active.length === 1 ? active[0] : null;
 }
 
-const replySchema = z.object({
-  reply: z.string(),
-  actions: z.array(assistantActionSchema).nullish(),
-});
+/**
+ * One step of a 投递, owned by this user, for the step actions. Falls back to
+ * closestId on StageHistory, or if the model passed an Application ID /
+ * companyName instead of a StageHistory ID, resolves that application's current step.
+ */
+async function stepRow(userId: string, id: string | null | undefined, companyName?: string | null, stage?: string | null) {
+  const select = { id: true, stage: true, note: true, meetingInfo: true, remindMinutes: true, enteredAt: true, application: { select: { id: true, company: { select: { name: true } } } } } as const;
+  const rawId = id?.trim() || "";
+  if (rawId) {
+    const exact = await db.stageHistory.findFirst({ where: { id: rawId, application: { userId } }, select });
+    if (exact) return exact;
+    const allStageIds = (await db.stageHistory.findMany({ where: { application: { userId } }, select: { id: true } })).map((r) => r.id);
+    const fixedStage = closestId(rawId, allStageIds);
+    if (fixedStage) {
+      const matched = await db.stageHistory.findFirst({ where: { id: fixedStage, application: { userId } }, select });
+      if (matched) return matched;
+    }
+  }
+  // Model passed [投递ID] or companyName instead of [进度ID]: resolve to that 投递's current step.
+  const app = await findApplicationForAction(userId, rawId, companyName);
+  if (app) {
+    const rows = await db.stageHistory.findMany({ where: { applicationId: app.id }, orderBy: { enteredAt: "asc" }, select });
+    const byStage = stage ? [...rows].reverse().find((r) => r.stage === stage) : null;
+    const picked = byStage ?? currentStageRow(app, rows);
+    if (picked) return picked;
+  }
+  if (!rawId && !companyName) throw new UserFacingError("没指明是哪一轮，到投递详情里操作吧");
+  throw new UserFacingError("找不到这一轮的记录，可能已经改过了，刷新一下再说");
+}
 
-export async function askAssistant(
-  message: string,
-  history: AssistantChatMessage[]
-): Promise<ActionResult<{ reply: string; actions: AssistantAction[] }>> {
-  return toActionResult(async () => {
-    const user = await requireUser();
-    if (!message.trim()) throw new UserFacingError("说点什么吧");
+async function findPositionForAction(userId: string, targetId?: string | null, companyName?: string | null, title?: string | null) {
+  const id = targetId?.trim() || "";
+  if (id) {
+    const exact = await db.position.findFirst({ where: { id, userId }, include: { company: true } });
+    if (exact) return exact;
+    const allIds = (await db.position.findMany({ where: { userId }, select: { id: true } })).map((r) => r.id);
+    const fixed = closestId(id, allIds);
+    if (fixed) {
+      const matched = await db.position.findFirst({ where: { id: fixed, userId }, include: { company: true } });
+      if (matched) return matched;
+    }
+  }
+  const company = companyName?.trim().toLowerCase();
+  if (!company) return null;
+  const candidates = await db.position.findMany({ where: { userId }, include: { company: true }, orderBy: { createdAt: "desc" } });
+  const byCompany = candidates.filter((p) => p.company.name.toLowerCase().includes(company) || company.includes(p.company.name.toLowerCase()));
+  if (!byCompany.length) return null;
+  const wantedTitle = title?.trim().toLowerCase();
+  if (wantedTitle) {
+    const byTitle = byCompany.filter((p) => p.title.toLowerCase().includes(wantedTitle) || wantedTitle.includes(p.title.toLowerCase()));
+    if (byTitle.length === 1) return byTitle[0];
+  }
+  return byCompany.length === 1 ? byCompany[0] : null;
+}
 
-    // callTextAi throws a clear "configure your own key" error below if
-    // this comes back null.
-    const config = await getUserAiConfig(user.id);
+/**
+ * 「2026-10-21T15:00」 → a time; 「2026-10-21」 → that day (stored as UTC
+ * midnight, like every date-only value). Read in this computer's time zone.
+ */
+function scheduleTime(raw: string | null | undefined, rawEnd: string | null | undefined) {
+  const value = raw?.trim() ?? "";
+  const timed = /^\d{4}-\d{2}-\d{2}[T ]\d{1,2}:\d{2}/.test(value);
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (!timed && !dateOnly) throw new UserFacingError("没认出具体时间，到投递详情里添加吧");
+  const start = timed ? new Date(value.replace(" ", "T")) : new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime())) throw new UserFacingError("时间格式不对");
+  const endValue = rawEnd?.trim() ?? "";
+  const end = endValue && /^\d{4}-\d{2}-\d{2}[T ]\d{1,2}:\d{2}/.test(endValue) && timed ? new Date(endValue.replace(" ", "T")) : null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const label = timed ? `${start.getMonth() + 1}月${start.getDate()}日 ${pad(start.getHours())}:${pad(start.getMinutes())}` : `${start.getUTCMonth() + 1}月${start.getUTCDate()}日`;
+  return { nextDeadline: start, nextDeadlineEnd: end && end.getTime() > start.getTime() ? end : null, nextHasTime: timed, label };
+}
 
-    const snapshot = await buildSnapshot(user.id);
-    const recentHistory = history.slice(-MAX_HISTORY_TURNS * 2);
-    const historyText = recentHistory
-      .map((h) => `${h.role === "user" ? "用户" : "助手"}：${h.content}`)
-      .join("\n");
-
-    const prompt = `你是这个求职跟踪 App 里的 AI 助手，帮用户快速看一眼自己的求职数据、做判断，而不是让用户自己一页页翻。你也帮用户把随口说的进展变成 App 里的记录，省得他自己去填表单。
-
-用户当前的求职数据快照：
-${snapshot}
-
-${historyText ? `之前的对话：\n${historyText}\n` : ""}
-用户现在说：${message}
-
-回答要求：
-- 直接用中文口语化回答，像同事帮忙看一眼，不要机械地照抄上面的数据列表
-- 如果问题是"哪个岗位/投递最值得...""该选哪个"这类比较判断，逐一分析给出明确结论和理由，不要只罗列数据不表态；判断时要结合他的目标方向、意向城市、期望薪资和截止日期
-- 只依据上面给出的数据快照回答；快照里没有的信息（比如某个岗位没有 JD 正文、简历没做过体检、个人资料没填）如实说明限制，不要编造
-- 简短，一般 2-6 句话说清楚就行，除非用户明确要展开分析
-
-关于 actions（可选，没有就给空数组）：
-当用户说的话意味着数据该被记下来或改动时，在 actions 里提出建议，用户点一下就会执行。绝不要凭空替他决定——只有他确实表达了这个意思才提。可用的 type：
-- add_task：加一条待办。title 填事情，date 填截止日（YYYY-MM-DD），note 可选
-- log_application：记一条新投递。companyName + title 必填，date 填投递日期（没说就用今天）
-- add_position：往候选岗位池里加一个还没投的岗位。companyName + title 必填，date 填截止日期，note 可写方向/地点
-- update_stage：更新某条投递的阶段。targetId 填上面的[投递ID]，stage 从这些里选：${applicationStageValues.join(" / ")}，date 填下一步的时间（比如面试时间），note 可选
-每个 action 的 label 写成用户一眼能看懂的按钮文案，比如"记一条投递：字节跳动 后端开发"或"更新为一面，面试时间 3月5日"。label 只是按钮上的字，不能代替上面那些字段——该填 title/companyName/targetId 的一个都不能少，别只写 label 就交差。
-举例：用户说"我今天投了美团的数据分析，下周三一面"，就给两个 action —— 一个 log_application，一个提醒他准备面试的 add_task。`;
-
-    const raw = await callTextAi({
-      config,
-      prompt,
-      thinkingBudget: 1024,
-      timeoutMs: 60000,
-      schema: {
-        type: "OBJECT",
-        properties: {
-          reply: { type: "STRING" },
-          actions: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                type: {
-                  type: "STRING",
-                  enum: ["add_task", "log_application", "add_position", "update_stage"],
-                },
-                label: { type: "STRING" },
-                companyName: { type: "STRING", nullable: true },
-                title: { type: "STRING", nullable: true },
-                date: { type: "STRING", nullable: true },
-                stage: { type: "STRING", nullable: true, enum: applicationStageValues },
-                targetId: { type: "STRING", nullable: true },
-                note: { type: "STRING", nullable: true },
-              },
-              required: ["type", "label"],
-            },
-          },
-        },
-        required: ["reply", "actions"],
-      },
-    });
-
-    const parsed = replySchema.safeParse(raw);
-    if (!parsed.success) throw new UserFacingError("AI 返回格式异常，请重试");
-
-    return { reply: parsed.data.reply, actions: parsed.data.actions ?? [] };
-  });
+/** An http(s) link, or nothing. */
+function webUrl(raw: string | null | undefined): string | null {
+  try {
+    const url = new URL(raw?.trim() ?? "");
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href.slice(0, 2000) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** YYYY-MM-DD (or anything Date can parse) -> Date, or null. */
@@ -251,6 +145,15 @@ function parseDate(raw: string | null | undefined): Date | null {
   if (!raw) return null;
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function normalizePositionStatus(input: string | null | undefined): "EVALUATING" | "PLANNED" | "DROPPED" | undefined {
+  if (!input?.trim()) return undefined;
+  const raw = input.trim().toUpperCase();
+  if (raw === "EVALUATING" || raw.includes("评估")) return "EVALUATING";
+  if (raw === "PLANNED" || raw === "TO_APPLY" || raw.includes("计划") || raw.includes("待投")) return "PLANNED";
+  if (raw === "DROPPED" || raw.includes("放弃")) return "DROPPED";
+  return undefined;
 }
 
 /**
@@ -269,10 +172,10 @@ export async function applyAssistantAction(
 
     switch (a.type) {
       case "add_task": {
-        // Models routinely put the whole task into `label` (the button
-        // text) and leave `title` null. The label reads fine as a task
-        // title, so fall back to it rather than leaving the user with a
-        // button that only ever errors.
+        // Models routinely put the whole task into `label` (the button text)
+        // and leave `title` null — measured on Qwen with "设一面提醒：…".
+        // The label reads fine as a task title, so fall back to it rather
+        // than leaving the user with a button that only ever errors.
         const title = a.title?.trim() || a.label.trim();
         if (!title) throw new UserFacingError("这条待办没有标题，改成手动添加吧");
         await db.personalTask.create({
@@ -281,6 +184,7 @@ export async function applyAssistantAction(
             title,
             note: a.note || undefined,
             dueDate: parseDate(a.date) ?? undefined,
+            dueDateEnd: parseDate(a.dateEnd) ?? undefined,
           },
         });
         revalidatePath("/dashboard");
@@ -293,19 +197,18 @@ export async function applyAssistantAction(
           throw new UserFacingError("公司或岗位名没给全，改成手动添加吧");
         }
         const appliedDate = parseDate(a.date) ?? new Date();
-        const company = await db.company.upsert({
-          where: { name: a.companyName },
-          update: {},
-          create: { name: a.companyName },
-        });
+        const companyId = await resolveCompanyId(a.companyName, { aiUserId: user.id });
+        const cities = parseCities(a.city);
+        const city = cities.length ? cities.slice(0, 12).join("、") : undefined;
         await db.$transaction(async (tx) => {
           const created = await tx.application.create({
             data: {
               userId: user.id,
-              companyId: company.id,
+              companyId,
               title: a.title!,
               appliedDate,
               source: a.note || undefined,
+              ...(city ? { city, citySource: null, cityLookupAt: new Date() } : {}),
               currentStage: "APPLIED",
               currentStageDate: appliedDate,
             },
@@ -316,27 +219,28 @@ export async function applyAssistantAction(
         });
         revalidatePath("/applications");
         revalidatePath("/dashboard");
-        return { done: `已记录投递：${a.companyName} · ${a.title}` };
+        return { done: `已记录投递：${a.companyName} · ${a.title}${city ? `（${city}）` : ""}` };
       }
 
       case "add_position": {
         if (!a.companyName || !a.title) {
           throw new UserFacingError("公司或岗位名没给全，改成手动添加吧");
         }
-        const company = await db.company.upsert({
-          where: { name: a.companyName },
-          update: {},
-          create: { name: a.companyName },
-        });
+        const companyId = await resolveCompanyId(a.companyName, { aiUserId: user.id });
+        const cities = parseCities(a.city);
         await db.position.create({
           data: {
             userId: user.id,
-            companyId: company.id,
+            companyId,
             title: a.title,
+            location: cities.length ? cities.join("、") : undefined,
+            salaryMin: a.salaryMin ?? undefined,
+            salaryMax: a.salaryMax ?? undefined,
             deadline: parseDate(a.date) ?? undefined,
             jdText: a.note || undefined,
-            source: "AI 助手",
-            status: "EVALUATING",
+            jdUrl: webUrl(a.url) ?? undefined,
+            source: "小欧",
+            status: normalizePositionStatus(a.positionStatus) ?? "EVALUATING",
             interestScore: computeInterestScore(undefined),
           },
         });
@@ -346,31 +250,356 @@ export async function applyAssistantAction(
       }
 
       case "update_stage": {
-        if (!a.targetId) throw new UserFacingError("没指明是哪条投递，改成手动更新吧");
         const stage = applicationStageValues.find((s) => s === a.stage);
         if (!stage) throw new UserFacingError("阶段名没认出来，改成手动更新吧");
-        const application = await db.application.findFirst({
-          where: { id: a.targetId, userId: user.id },
-        });
-        if (!application) throw new UserFacingError("找不到这条投递记录");
+        const application = await findApplicationForAction(user.id, a.targetId, a.companyName, a.title);
+        if (!application) throw new UserFacingError("找不到这条投递记录，改成手动更新吧");
+        const cities = parseCities(a.city);
         await db.$transaction(async (tx) => {
           await tx.stageHistory.create({
             data: {
               applicationId: application.id,
               stage,
+              ...terminationFields(stage, application.currentStage, application.currentStageLabel),
               note: a.note || undefined,
               nextDeadline: parseDate(a.date) ?? undefined,
+              nextDeadlineEnd: parseDate(a.dateEnd) ?? undefined,
             },
           });
           await tx.application.update({
             where: { id: application.id },
-            data: { currentStage: stage, currentStageDate: new Date() },
+            data: {
+              currentStage: stage,
+              currentStageDate: new Date(),
+              ...(cities.length ? { city: cities.slice(0, 12).join("、"), citySource: null, cityLookupAt: new Date() } : {}),
+            },
           });
         });
         revalidatePath(`/applications/${application.id}`);
         revalidatePath("/applications");
         revalidatePath("/dashboard");
-        return { done: `已更新为${STAGE_LABELS[stage]}` };
+        return { done: `已将 ${application.company.name} · ${application.title} 更新为${STAGE_LABELS[stage]}` };
+      }
+
+      case "promote_lead": {
+        if (!a.targetId) throw new UserFacingError("没指明是哪条线索，改成手动操作吧");
+        const lead = await db.jobLead.findFirst({
+          where: { id: a.targetId, userId: user.id },
+        });
+        if (!lead) throw new UserFacingError("找不到这条线索");
+        if (lead.promotedPositionId) {
+          throw new UserFacingError("这条已经在候选池里了");
+        }
+        const companyId = await resolveCompanyId(lead.companyName, { aiUserId: user.id });
+        const position = await db.position.create({
+          data: {
+            userId: user.id,
+            companyId,
+            title: lead.title,
+            track: lead.track ?? undefined,
+            department: lead.department ?? undefined,
+            location: lead.location ?? undefined,
+            salaryMin: lead.salaryMin ?? undefined,
+            salaryMax: lead.salaryMax ?? undefined,
+            deadline: lead.deadline ?? undefined,
+            jdUrl: lead.jdUrl ?? undefined,
+            source: lead.source ?? "秋招信息库",
+            jdText: lead.note ?? undefined,
+            status: "EVALUATING",
+            interestScore: computeInterestScore(undefined),
+          },
+        });
+        await db.jobLead.update({
+          where: { id: lead.id },
+          data: { promotedPositionId: position.id },
+        });
+        revalidatePath("/pool");
+        revalidatePath("/leads");
+        revalidatePath("/dashboard");
+        return { done: `已提入候选池：${lead.companyName} · ${lead.title}` };
+      }
+
+      case "add_contact": {
+        const name = a.contactName?.trim() || a.label.trim();
+        if (!name) throw new UserFacingError("没认出联系人姓名，改成手动添加吧");
+        await db.contact.create({
+          data: {
+            userId: user.id,
+            name,
+            role: a.title || undefined,
+            companyName: a.companyName || undefined,
+            note: a.note || undefined,
+            nextFollowUpAt: parseDate(a.date) ?? undefined,
+          },
+        });
+        revalidateContactPaths();
+        return { done: `已加联系人：${name}` };
+      }
+
+      case "mark_position_applied": {
+        const position = await findPositionForAction(user.id, a.targetId, a.companyName, a.title);
+        if (!position) throw new UserFacingError("找不到这个候选岗位，改成手动标记吧");
+        await markPositionsApplied([position.id], {
+          appliedDate: parseDate(a.date) ?? new Date(),
+          referrer: a.contactName || undefined,
+          source: a.note || undefined,
+        });
+        return { done: `已标记为已投递：${position.company.name} · ${position.title}` };
+      }
+
+      case "update_application": {
+        const application = await findApplicationForAction(user.id, a.targetId, a.companyName, a.title);
+        if (!application) throw new UserFacingError("找不到这条投递记录，改成手动修改吧");
+        const cities = parseCities(a.city);
+        await updateApplication(application.id, {
+          appliedDate: parseDate(a.date) ?? application.appliedDate,
+          referrer: a.contactName || undefined,
+          source: a.note || undefined,
+          ...(cities.length ? { city: cities.slice(0, 12).join("、") } : {}),
+        });
+        return { done: `已更新投递信息：${application.company.name} · ${application.title}` };
+      }
+
+      case "delete_position": {
+        const position = await findPositionForAction(user.id, a.targetId, a.companyName, a.title);
+        if (!position) throw new UserFacingError("找不到这个候选岗位，改成手动删除吧");
+        await deletePosition(position.id);
+        return { done: `已删除候选岗位：${position.title}` };
+      }
+
+      case "withdraw_application": {
+        const application = await findApplicationForAction(user.id, a.targetId, a.companyName, a.title);
+        if (!application) throw new UserFacingError("找不到这条投递记录，改成手动删除吧");
+        await deleteApplication(application.id);
+        return { done: `已删除投递记录：${application.title}` };
+      }
+
+      case "complete_task": {
+        const id = a.targetId?.trim() || "";
+        let task = id ? await db.personalTask.findFirst({ where: { id, userId: user.id } }) : null;
+        if (!task && id) {
+          const allIds = (await db.personalTask.findMany({ where: { userId: user.id }, select: { id: true } })).map((t) => t.id);
+          const fixed = closestId(id, allIds);
+          if (fixed) task = await db.personalTask.findFirst({ where: { id: fixed, userId: user.id } });
+        }
+        if (!task && a.title?.trim()) {
+          task = await db.personalTask.findFirst({ where: { userId: user.id, done: false, title: { contains: a.title.trim() } } });
+        }
+        if (!task) throw new UserFacingError("找不到这条待办，改成手动完成吧");
+        await toggleTaskDone(task.id, true);
+        return { done: `已完成待办：${task.title}` };
+      }
+
+      case "set_schedule": {
+        const application = await findApplicationForAction(user.id, a.targetId, a.companyName, a.title);
+        if (!application) throw new UserFacingError("找不到这条投递记录，到投递详情里添加时间吧");
+        const when = scheduleTime(a.date, a.dateEnd);
+        const stage = applicationStageValues.find((value) => value === a.stage) ?? application.currentStage;
+        const result = await addStageSchedule(application.id, stage, { ...when, meetingInfo: a.note?.trim() || null });
+        if (!result.ok) throw new UserFacingError(result.message);
+        return { done: `已记下 ${application.company.name} ${STAGE_LABELS[stage]}：${when.label}` };
+      }
+
+      case "reschedule": {
+        const row = await stepRow(user.id, a.targetId, a.companyName, a.stage);
+        const when = scheduleTime(a.date, a.dateEnd);
+        const result = await setStageSchedule(row.id, { ...when, meetingInfo: a.note?.trim() || row.meetingInfo, remindMinutes: row.remindMinutes });
+        if (!result.ok) throw new UserFacingError(result.message);
+        return { done: `已改到 ${when.label}：${row.application.company.name} ${STAGE_LABELS[row.stage]}` };
+      }
+
+      case "complete_step": {
+        const row = await stepRow(user.id, a.targetId, a.companyName, a.stage);
+        const result = await setStepCompleted(row.id, true);
+        if (!result.ok) throw new UserFacingError(result.message);
+        return { done: `已标记完成：${row.application.company.name} ${STAGE_LABELS[row.stage]}，开始等结果` };
+      }
+
+      case "save_note": {
+        const row = await stepRow(user.id, a.targetId, a.companyName, a.stage);
+        const text = a.note?.trim();
+        if (!text) throw new UserFacingError("没有要记的内容");
+        // Added below what is already there, never in its place.
+        const result = await saveStepNote(row.id, row.note?.trim() ? `${row.note.trim()}\n\n${text}` : text);
+        if (!result.ok) throw new UserFacingError(result.message);
+        return { done: `已记到 ${row.application.company.name} ${STAGE_LABELS[row.stage]} 的复盘里` };
+      }
+
+      case "mark_followed_up": {
+        const row = await stepRow(user.id, a.targetId, a.companyName, a.stage);
+        const result = await markFollowedUp(row.id);
+        if (!result.ok) throw new UserFacingError(result.message);
+        return { done: `已记下跟进过：${row.application.company.name}` };
+      }
+
+      case "mark_contacted": {
+        const id = a.targetId?.trim() || "";
+        let contact = id ? await db.contact.findFirst({ where: { id, userId: user.id } }) : null;
+        if (!contact && id) {
+          const allIds = (await db.contact.findMany({ where: { userId: user.id }, select: { id: true } })).map((c) => c.id);
+          const fixed = closestId(id, allIds);
+          if (fixed) contact = await db.contact.findFirst({ where: { id: fixed, userId: user.id } });
+        }
+        if (!contact && a.contactName?.trim()) {
+          contact = await db.contact.findFirst({ where: { userId: user.id, name: { contains: a.contactName.trim() } } });
+        }
+        if (!contact) throw new UserFacingError("找不到这个联系人，改成手动操作吧");
+        await markContacted(contact.id);
+        return { done: `已记录联系：${contact.name}` };
+      }
+
+      case "set_city": {
+        const cities = parseCities(a.city ?? a.note);
+        if (!cities.length) throw new UserFacingError("没认出城市名，到投递里手动改吧");
+        const application = (a.targetId ? await db.application.findFirst({ where: { id: a.targetId, userId: user.id }, include: { company: true } }) : null)
+          ?? await findApplicationForAction(user.id, a.targetId, a.companyName, a.title);
+        if (!application) throw new UserFacingError("找不到这条投递记录");
+        const city = cities.slice(0, 12).join("、");
+        // Confirmed by the user, so no longer a guess: it shows like one typed in.
+        await db.application.update({ where: { id: application.id }, data: { city, citySource: null, cityLookupAt: new Date() } });
+        revalidatePath("/applications");
+        return { done: `${application.company.name} · ${application.title} 的城市记为 ${city}` };
+      }
+
+      case "update_offer": {
+        const application = await findApplicationForAction(user.id, a.targetId, a.companyName, a.title);
+        if (!application) throw new UserFacingError("找不到这条投递记录，到投递详情里填写 Offer 信息吧");
+        const cities = parseCities(a.city);
+        const data: Record<string, unknown> = {};
+        if (a.salaryMin != null) data.salaryMin = a.salaryMin;
+        if (a.salaryMax != null) data.salaryMax = a.salaryMax;
+        if (a.offerAnnualTotal != null) data.offerAnnualTotal = a.offerAnnualTotal;
+        if (a.commuteMinutes != null) data.commuteMinutes = a.commuteMinutes;
+        if (a.overtimeNote?.trim()) data.overtimeNote = a.overtimeNote.trim().slice(0, 300);
+        if (a.growthNote?.trim()) data.growthNote = a.growthNote.trim().slice(0, 300);
+        if (a.note?.trim()) data.offerNote = a.note.trim().slice(0, 1000);
+        if (cities.length) {
+          data.city = cities.slice(0, 12).join("、");
+          data.citySource = null;
+          data.cityLookupAt = new Date();
+        }
+        if (!Object.keys(data).length) throw new UserFacingError("没有要保存的薪资或 Offer 信息");
+        await db.application.update({ where: { id: application.id }, data });
+        revalidatePath(`/applications/${application.id}`);
+        revalidatePath("/applications");
+        revalidatePath("/dashboard");
+        revalidatePath("/insights");
+        return { done: `已更新 Offer 信息：${application.company.name} · ${application.title}` };
+      }
+
+      case "update_position": {
+        const position = await findPositionForAction(user.id, a.targetId, a.companyName, a.title);
+        if (!position) throw new UserFacingError("找不到这个候选岗位，到候选池里修改吧");
+        const cities = parseCities(a.city);
+        const data: Record<string, unknown> = {};
+        const status = normalizePositionStatus(a.positionStatus);
+        if (status) data.status = status;
+        if (cities.length) data.location = cities.join("、");
+        else if (a.city?.trim()) data.location = a.city.trim().slice(0, 60);
+        const deadline = parseDate(a.date);
+        if (deadline) data.deadline = deadline;
+        if (a.salaryMin != null) data.salaryMin = a.salaryMin;
+        if (a.salaryMax != null) data.salaryMax = a.salaryMax;
+        if (a.note?.trim()) data.jdText = a.note.trim().slice(0, 10000);
+        const url = webUrl(a.url);
+        if (url) data.jdUrl = url;
+        if (!Object.keys(data).length) throw new UserFacingError("没有要更新的岗位字段");
+        await db.position.update({ where: { id: position.id }, data });
+        revalidatePath("/pool");
+        revalidatePath("/dashboard");
+        return { done: `已更新候选岗位：${position.company.name} · ${position.title}` };
+      }
+
+      case "add_calendar_event": {
+        const title = (a.title?.trim() || a.label.trim()).slice(0, 200);
+        if (!title) throw new UserFacingError("请提供日程标题");
+        const when = scheduleTime(a.date, a.dateEnd);
+        const result = await addCalendarItem(title, {
+          nextDeadline: when.nextDeadline,
+          nextDeadlineEnd: when.nextDeadlineEnd,
+          nextHasTime: when.nextHasTime,
+          meetingInfo: a.note?.trim() || null,
+          remindMinutes: when.nextHasTime ? 30 : null,
+        });
+        if (!result.ok) throw new UserFacingError(result.message);
+        return { done: `已加入日历：${title}（${when.label}）` };
+      }
+
+      case "complete_calendar_event": {
+        const id = a.targetId?.trim() || "";
+        if (!id) throw new UserFacingError("没指明是哪条日程，到日历里操作吧");
+        let event = await db.calendarEvent.findFirst({ where: { id, userId: user.id, stageHistoryId: null } });
+        if (!event) {
+          const allEventIds = (await db.calendarEvent.findMany({ where: { userId: user.id, stageHistoryId: null }, select: { id: true } })).map((e) => e.id);
+          const fixed = closestId(id, allEventIds);
+          if (fixed) event = await db.calendarEvent.findFirst({ where: { id: fixed, userId: user.id, stageHistoryId: null } });
+        }
+        if (event) {
+          const result = await setEventCompleted(event.id, true);
+          if (!result.ok) throw new UserFacingError(result.message);
+          return { done: `已标记日程完成：${event.title}` };
+        }
+        // Check if targetId is a pending mail schedule task ID.
+        let mailTask = await db.personalTask.findFirst({ where: { id, userId: user.id } });
+        if (!mailTask) {
+          const allTaskIds = (await db.personalTask.findMany({ where: { userId: user.id }, select: { id: true } })).map((t) => t.id);
+          const fixedTask = closestId(id, allTaskIds);
+          if (fixedTask) mailTask = await db.personalTask.findFirst({ where: { id: fixedTask, userId: user.id } });
+        }
+        if (mailTask) {
+          const result = await writeMailSchedule(mailTask.id);
+          if (!result.ok) throw new UserFacingError(result.message);
+          return { done: `已将邮件日程写入日历：${mailTask.title}` };
+        }
+        throw new UserFacingError("找不到这条日程或邮件待办，请刷新后再试");
+      }
+
+      case "update_profile": {
+        const data: Record<string, unknown> = {};
+        if (a.title?.trim()) data.targetTrack = a.title.trim().slice(0, 120);
+        if (a.city?.trim()) data.preferredCities = a.city.trim().slice(0, 120);
+        if (a.salaryMin != null) data.expectedSalaryMin = a.salaryMin;
+        if (a.note?.trim()) data.skills = a.note.trim().slice(0, 500);
+        if (!Object.keys(data).length) throw new UserFacingError("没有要更新的求职偏好字段");
+        await db.user.update({ where: { id: user.id }, data });
+        revalidatePath("/settings");
+        revalidatePath("/dashboard");
+        return { done: "已更新个人求职偏好" };
+      }
+
+      case "update_company_industry": {
+        const companyName = a.companyName?.trim();
+        const industry = (a.title || a.note || "").trim().slice(0, 40);
+        if (!companyName || !industry) throw new UserFacingError("请提供公司名和行业分类");
+        const companyId = await resolveCompanyId(companyName, { aiUserId: user.id });
+        await db.company.update({ where: { id: companyId }, data: { industry } });
+        revalidatePath("/applications");
+        revalidatePath("/companies");
+        return { done: `已将 ${companyName} 的行业设为「${industry}」` };
+      }
+
+      case "add_journey": {
+        const text = (a.note || a.title || "").trim().slice(0, 2000);
+        if (!text) throw new UserFacingError("没有要记录的心路历程内容");
+        const about = (a.companyName && a.title && a.note ? `${a.companyName.trim()} · ${a.title.trim()}` : (a.companyName || (a.note ? a.title : null))?.trim())?.slice(0, 80) || null;
+        const rawMood = (a.mood ?? "").trim().toLowerCase();
+        const mood =
+          rawMood === "happy" || /开心|高兴|突破|顺利|激动|喜/.test(rawMood) ? "happy"
+          : rawMood === "down" || /低落|沮丧|焦虑|累|疲|失落/.test(rawMood) ? "down"
+          : rawMood === "angry" || /生气|愤怒|无语|烦/.test(rawMood) ? "angry"
+          : rawMood === "cry" || /难过|哭|崩溃|伤心/.test(rawMood) ? "cry"
+          : "ok";
+        await db.journeyEntry.create({
+          data: {
+            userId: user.id,
+            mood,
+            text,
+            about,
+          },
+        });
+        revalidatePath("/journey");
+        revalidatePath("/dashboard");
+        return { done: `已记入心路历程${about ? `（${about}）` : ""}` };
       }
     }
   });

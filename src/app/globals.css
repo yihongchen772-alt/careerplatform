@@ -87,9 +87,9 @@
   /* Two-stop brand gradient (indigo → violet) — the signature color move
      that makes primary buttons, stat icons and the ambient page glow read
      as "one product" instead of flat single-hue fills. */
-  --gradient-accent: linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #d946ef 100%);
-  --glow-1: #6366f1;
-  --glow-2: #d946ef;
+  --gradient-accent: linear-gradient(135deg, #5666da, #8b8fe8);
+  --glow-1: #6d80d7;
+  --glow-2: #9b96d7;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -131,9 +131,9 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
   --ring: #818cf8;
-  --gradient-accent: linear-gradient(135deg, #818cf8 0%, #a78bfa 60%, #e879f9 100%);
-  --glow-1: #818cf8;
-  --glow-2: #e879f9;
+  --gradient-accent: linear-gradient(135deg, #8798f0, #aea7ef);
+  --glow-1: #7285cf;
+  --glow-2: #a296ce;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -290,6 +290,195 @@
   --sidebar-ring: oklch(0.6 0 0);
 }
 
+/* Quiet metallic neutrals with a blue-gray accent. */
+[data-palette="titanium"] {
+  --background: #f3f5f7;
+  --foreground: #202a35;
+  --card: #ffffff;
+  --card-foreground: #202a35;
+  --popover: #ffffff;
+  --popover-foreground: #202a35;
+  --primary: #526a86;
+  --primary-foreground: #ffffff;
+  --secondary: #e8edf2;
+  --secondary-foreground: #2b3948;
+  --muted: #e9eef3;
+  --muted-foreground: #667382;
+  --accent: #e7edf4;
+  --accent-foreground: #405b78;
+  --border: #dbe2e9;
+  --input: #dbe2e9;
+  --ring: #6d88a5;
+  --gradient-accent: linear-gradient(135deg, #526a86, #7893ac);
+  --glow-1: #9db3ca;
+  --glow-2: #d8e2ec;
+  --sidebar: #f5f7f9;
+  --sidebar-foreground: #202a35;
+  --sidebar-primary: #526a86;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e5ebf1;
+  --sidebar-accent-foreground: #2b3948;
+  --sidebar-border: #dbe2e9;
+  --sidebar-ring: #6d88a5;
+}
+
+.dark[data-palette="titanium"] {
+  --background: #161c24;
+  --foreground: #edf2f6;
+  --card: #202832;
+  --card-foreground: #edf2f6;
+  --popover: #202832;
+  --popover-foreground: #edf2f6;
+  --primary: #a3bed8;
+  --primary-foreground: #14202b;
+  --secondary: #2c3641;
+  --secondary-foreground: #edf2f6;
+  --muted: #2c3641;
+  --muted-foreground: #a9b5c1;
+  --accent: #2f4052;
+  --accent-foreground: #d2e4f4;
+  --border: #36414d;
+  --input: #36414d;
+  --ring: #9bb8d2;
+  --gradient-accent: linear-gradient(135deg, #a3bed8, #7899b8);
+  --glow-1: #5d7b9d;
+  --glow-2: #31495d;
+  --sidebar: #19212a;
+  --sidebar-foreground: #edf2f6;
+  --sidebar-primary: #a3bed8;
+  --sidebar-primary-foreground: #14202b;
+  --sidebar-accent: #2d3c4b;
+  --sidebar-accent-foreground: #e4f1fc;
+  --sidebar-border: #36414d;
+  --sidebar-ring: #9bb8d2;
+}
+
+/* Cool aurora: color lives in highlights while the working surfaces stay calm. */
+[data-palette="aurora"] {
+  --background: #f1f8f7;
+  --foreground: #17312f;
+  --card: #ffffff;
+  --card-foreground: #17312f;
+  --popover: #ffffff;
+  --popover-foreground: #17312f;
+  --primary: #087f78;
+  --primary-foreground: #ffffff;
+  --secondary: #e2f0ed;
+  --secondary-foreground: #1c4d49;
+  --muted: #e7f1ef;
+  --muted-foreground: #59716e;
+  --accent: #d9f0eb;
+  --accent-foreground: #076e68;
+  --border: #d3e6e1;
+  --input: #d3e6e1;
+  --ring: #13a69b;
+  --gradient-accent: linear-gradient(135deg, #087f78, #27afa4);
+  --glow-1: #6bc9bd;
+  --glow-2: #c4e9d9;
+  --sidebar: #f1f8f7;
+  --sidebar-foreground: #17312f;
+  --sidebar-primary: #087f78;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #dceee9;
+  --sidebar-accent-foreground: #076e68;
+  --sidebar-border: #d3e6e1;
+  --sidebar-ring: #13a69b;
+}
+
+.dark[data-palette="aurora"] {
+  --background: #0d2022;
+  --foreground: #e9f7f3;
+  --card: #183034;
+  --card-foreground: #e9f7f3;
+  --popover: #183034;
+  --popover-foreground: #e9f7f3;
+  --primary: #57dac7;
+  --primary-foreground: #0b2928;
+  --secondary: #234247;
+  --secondary-foreground: #e9f7f3;
+  --muted: #234247;
+  --muted-foreground: #a5c7c0;
+  --accent: #245653;
+  --accent-foreground: #b4f5e9;
+  --border: #315055;
+  --input: #315055;
+  --ring: #57dac7;
+  --gradient-accent: linear-gradient(135deg, #57dac7, #8be7d2);
+  --glow-1: #1b9088;
+  --glow-2: #277b72;
+  --sidebar: #11282b;
+  --sidebar-foreground: #e9f7f3;
+  --sidebar-primary: #57dac7;
+  --sidebar-primary-foreground: #0b2928;
+  --sidebar-accent: #24504f;
+  --sidebar-accent-foreground: #b4f5e9;
+  --sidebar-border: #315055;
+  --sidebar-ring: #57dac7;
+}
+
+/* Warm paper and restrained champagne metal. */
+[data-palette="champagne"] {
+  --background: #faf7f2;
+  --foreground: #302820;
+  --card: #fffdfa;
+  --card-foreground: #302820;
+  --popover: #fffdfa;
+  --popover-foreground: #302820;
+  --primary: #956942;
+  --primary-foreground: #ffffff;
+  --secondary: #f1e9df;
+  --secondary-foreground: #513d2d;
+  --muted: #f3ece3;
+  --muted-foreground: #786b5f;
+  --accent: #f3e5d3;
+  --accent-foreground: #815937;
+  --border: #e9ded1;
+  --input: #e9ded1;
+  --ring: #af8058;
+  --gradient-accent: linear-gradient(135deg, #956942, #bd9067);
+  --glow-1: #e2bc8f;
+  --glow-2: #f1dfc5;
+  --sidebar: #faf7f2;
+  --sidebar-foreground: #302820;
+  --sidebar-primary: #956942;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0e5d8;
+  --sidebar-accent-foreground: #815937;
+  --sidebar-border: #e9ded1;
+  --sidebar-ring: #af8058;
+}
+
+.dark[data-palette="champagne"] {
+  --background: #211b18;
+  --foreground: #f6eee5;
+  --card: #2d2520;
+  --card-foreground: #f6eee5;
+  --popover: #2d2520;
+  --popover-foreground: #f6eee5;
+  --primary: #e2b68e;
+  --primary-foreground: #261b14;
+  --secondary: #3c312a;
+  --secondary-foreground: #f6eee5;
+  --muted: #3c312a;
+  --muted-foreground: #c4ad99;
+  --accent: #533d2c;
+  --accent-foreground: #f2d3b0;
+  --border: #4c3c31;
+  --input: #4c3c31;
+  --ring: #e2b68e;
+  --gradient-accent: linear-gradient(135deg, #e2b68e, #c99169);
+  --glow-1: #a76e48;
+  --glow-2: #6f5038;
+  --sidebar: #251e19;
+  --sidebar-foreground: #f6eee5;
+  --sidebar-primary: #e2b68e;
+  --sidebar-primary-foreground: #261b14;
+  --sidebar-accent: #48372b;
+  --sidebar-accent-foreground: #f2d3b0;
+  --sidebar-border: #4c3c31;
+  --sidebar-ring: #e2b68e;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -312,4 +501,415 @@
   h1 {
     letter-spacing: -0.025em;
   }
+}
+
+/* ---------- 界面风格 (data-style on <html>) ----------
+   Independent of the palette: how surfaces look. Cards, the primary button,
+   the sidebar and the ambient glow read these, so a style is only a set of
+   values here and every page follows. :root holds 简约 (the default). */
+:root,
+[data-style="minimal"] {
+  --radius: 0.5rem;
+  --surface-card: var(--card);
+  --card-edge: color-mix(in oklch, var(--foreground) 9%, transparent);
+  --card-shadow: 0 0 0 0 transparent;
+  --card-shadow-hover: 0 0 0 0 transparent;
+  --card-blur: 0px;
+  --btn-primary-bg: var(--primary);
+  --btn-primary-shadow: 0 0 0 0 transparent;
+  --btn-radius: 0.5rem;
+  --sidebar-surface: var(--background);
+  --sidebar-edge: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --glow-opacity: 0;
+  --page-heading: 1.5rem;
+  --nav-active-bg: color-mix(in oklch, var(--foreground) 7%, transparent);
+  --nav-active-shadow: 0 0 0 0 transparent;
+  --nav-active-fg: var(--foreground);
+  --nav-active-icon: var(--primary);
+}
+
+[data-style="glass"] {
+  --radius: 0.875rem;
+  --surface-card: color-mix(in oklch, var(--card) 58%, transparent);
+  --card-edge: color-mix(in oklch, var(--card) 70%, var(--foreground) 6%);
+  --card-shadow: 0 1px 1px rgba(0, 0, 0, 0.02), 0 12px 32px -16px rgba(0, 0, 0, 0.18);
+  --card-shadow-hover: 0 1px 2px rgba(0, 0, 0, 0.03), 0 18px 40px -16px rgba(0, 0, 0, 0.22);
+  --card-blur: 28px;
+  --btn-primary-bg: var(--gradient-accent);
+  --btn-primary-shadow: 0 6px 18px -8px color-mix(in oklch, var(--glow-1), transparent 20%);
+  --btn-radius: 9999px;
+  --sidebar-surface: color-mix(in oklch, var(--card) 45%, transparent);
+  --sidebar-edge: color-mix(in oklch, var(--foreground) 6%, transparent);
+  --glow-opacity: 1.6;
+  --page-heading: 1.75rem;
+}
+
+[data-style="classic"] {
+  --radius: 0.75rem;
+  --surface-card: color-mix(in oklch, var(--card) 75%, transparent);
+  --card-edge: color-mix(in oklch, var(--foreground) 6%, transparent);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 10px 24px -12px rgba(0, 0, 0, 0.12);
+  --card-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.04), 0 16px 32px -14px rgba(0, 0, 0, 0.16);
+  --card-blur: 24px;
+  --btn-primary-bg: var(--gradient-accent);
+  --btn-primary-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 20px -6px color-mix(in oklch, var(--glow-1), transparent 25%);
+  --btn-radius: 9999px;
+  --sidebar-surface: color-mix(in oklch, var(--sidebar) 80%, transparent);
+  --sidebar-edge: color-mix(in oklch, var(--border) 60%, transparent);
+  --glow-opacity: 1;
+  --page-heading: 1.875rem;
+}
+
+/* 柔光 (the default): white cards that float on soft shadows instead of
+   borders, generous rounding, pill buttons, the system font — the way Apple's
+   own apps and the reference dashboards look. */
+[data-style="soft"] {
+  --radius: 1rem;
+  --surface-card: var(--card);
+  --card-edge: color-mix(in oklch, var(--foreground) 4%, transparent);
+  /* Shadows carry a little of the brand color, the way the reference cards glow. */
+  --card-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 14px 34px -16px color-mix(in oklch, var(--primary), transparent 72%);
+  --card-shadow-hover: 0 2px 4px rgba(15, 23, 42, 0.04), 0 20px 44px -16px color-mix(in oklch, var(--primary), transparent 62%);
+  --card-blur: 0px;
+  --btn-primary-bg: var(--gradient-accent);
+  --btn-primary-shadow: 0 8px 20px -8px color-mix(in oklch, var(--primary), transparent 35%);
+  --btn-radius: 9999px;
+  --sidebar-surface: transparent;
+  --sidebar-edge: transparent;
+  --nav-active-bg: var(--gradient-accent);
+  --nav-active-shadow: 0 8px 18px -8px color-mix(in oklch, var(--primary), transparent 30%);
+  --nav-active-fg: var(--primary-foreground);
+  --nav-active-icon: var(--primary-foreground);
+  --hero-bg: radial-gradient(120% 140% at 100% 0%, color-mix(in oklch, var(--glow-2), white 10%) 0%, transparent 55%), var(--gradient-accent);
+  --page-bg:
+    radial-gradient(1100px 620px at 100% -8%, color-mix(in oklch, var(--glow-1), transparent 80%), transparent 62%),
+    radial-gradient(900px 640px at -6% 108%, color-mix(in oklch, var(--glow-2), transparent 78%), transparent 60%),
+    color-mix(in oklch, var(--background) 94%, var(--primary) 3%);
+  --glow-opacity: 0;
+  --page-heading: 1.875rem;
+}
+
+.dark[data-style="soft"] {
+  --card-edge: color-mix(in oklch, var(--foreground) 7%, transparent);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px -14px rgba(0, 0, 0, 0.55);
+  --card-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 18px 40px -14px rgba(0, 0, 0, 0.6);
+  --nav-active-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.6);
+  --page-bg:
+    radial-gradient(1100px 620px at 100% -8%, color-mix(in oklch, var(--glow-1), transparent 86%), transparent 62%),
+    radial-gradient(900px 640px at -6% 108%, color-mix(in oklch, var(--glow-2), transparent 88%), transparent 60%),
+    var(--background);
+}
+
+/* 柔光: the page itself is a soft brand-tinted gradient; the sidebar is a
+   floating frosted panel on it. */
+html[data-style="soft"] body {
+  background: var(--page-bg);
+  background-attachment: fixed;
+}
+[data-style="soft"] .app-sidebar {
+  position: sticky;
+  top: 12px;
+  align-self: flex-start;
+  height: calc(100vh - 24px);
+  margin: 12px 0 12px 12px;
+  border-radius: 1.5rem;
+  background: color-mix(in oklch, var(--card) 72%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 5%, transparent), 0 16px 40px -20px color-mix(in oklch, var(--primary), transparent 70%);
+  backdrop-filter: blur(24px);
+}
+[data-style="soft"] .app-sidebar > div {
+  position: static;
+  height: 100%;
+}
+
+/* 总览's opening card: in 柔光 the same light, brand-tinted card as every
+   other page's (page-hero), so the app reads as one; a plain heading elsewhere. */
+.hero-card {
+  position: relative;
+  overflow: hidden;
+}
+.hero-card .hero-decor {
+  display: none;
+}
+[data-style="soft"] .hero-card {
+  border-radius: 1.5rem;
+  padding: 1.5rem 1.75rem;
+  background:
+    radial-gradient(70% 160% at 0% 0%, color-mix(in oklch, var(--primary) 14%, transparent) 0%, transparent 62%),
+    radial-gradient(50% 140% at 100% 100%, color-mix(in oklch, var(--glow-2) 10%, transparent) 0%, transparent 70%),
+    var(--card);
+  box-shadow: inset 0 0 0 1px var(--card-edge), var(--card-shadow);
+}
+.dark[data-style="soft"] .hero-card {
+  background:
+    radial-gradient(70% 160% at 0% 0%, color-mix(in oklch, var(--primary) 18%, transparent) 0%, transparent 62%),
+    var(--card);
+}
+[data-style="soft"] .hero-card .hero-pill {
+  background: color-mix(in oklch, var(--primary) 9%, var(--card));
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 16%, transparent);
+}
+[data-style="soft"] .hero-card .hero-action {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+/* Inner pages open with a light card: brand-tinted at the left, white at the
+   right, a gradient icon tile — the same family as 总览's card, quieter, so
+   the pages read as one app and 总览 keeps its welcome. */
+.page-hero {
+  position: relative;
+  overflow: hidden;
+}
+.page-hero-decor {
+  display: none;
+}
+[data-style="soft"] .page-hero {
+  padding: 1.25rem 1.6rem;
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(70% 160% at 0% 0%, color-mix(in oklch, var(--primary) 12%, transparent) 0%, transparent 62%),
+    radial-gradient(50% 140% at 100% 100%, color-mix(in oklch, var(--glow-2) 10%, transparent) 0%, transparent 70%),
+    var(--card);
+  box-shadow: inset 0 0 0 1px var(--card-edge), var(--card-shadow);
+}
+[data-style="soft"] .page-hero h1 {
+  font-size: 1.45rem;
+  letter-spacing: -0.02em;
+}
+[data-style="soft"] .page-hero-chip {
+  background: var(--gradient-accent);
+  color: var(--primary-foreground);
+  box-shadow: 0 8px 18px -8px color-mix(in oklch, var(--primary), transparent 30%);
+}
+.dark[data-style="soft"] .page-hero {
+  background:
+    radial-gradient(70% 160% at 0% 0%, color-mix(in oklch, var(--primary) 16%, transparent) 0%, transparent 62%),
+    var(--card);
+}
+/* Calendars in 柔光: round days, the chosen one a gradient dot, days with something on them tinted. */
+[data-style="soft"] [data-slot="calendar"] {
+  --cell-radius: 9999px;
+}
+[data-style="soft"] [data-slot="calendar"] .has-event button {
+  background: color-mix(in oklch, var(--primary), transparent 88%);
+  border-radius: 9999px;
+}
+[data-style="soft"] [data-slot="calendar"] button[data-selected-single="true"] {
+  background: var(--gradient-accent);
+  color: var(--primary-foreground);
+  border-radius: 9999px;
+  box-shadow: 0 6px 14px -6px color-mix(in oklch, var(--primary), transparent 30%);
+}
+
+/* A section's icon tile: the brand gradient in 柔光, a tint elsewhere. */
+[data-style="soft"] .section-chip {
+  background: var(--gradient-accent);
+  color: var(--primary-foreground);
+  box-shadow: 0 6px 14px -6px color-mix(in oklch, var(--primary), transparent 35%);
+}
+/* 总览's one-line facts, as pills: muted elsewhere, frosted on the gradient. */
+.hero-pill {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+/* The system font: SF Pro + 苹方 on a Mac, Segoe UI + 微软雅黑 on Windows. */
+html[data-style="soft"] {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+[data-style="soft"] [data-slot="card-title"] {
+  font-weight: 600;
+}
+
+/* Dashboard number tiles: a white card faintly tinted with its own color — one
+   family with the rest of the app rather than four gradients. */
+[data-style="soft"] .stat-tile[data-tone="brand"] { background: color-mix(in oklch, var(--primary) 7%, var(--card)); }
+[data-style="soft"] .stat-tile[data-tone="amber"] { background: color-mix(in oklch, #f59e0b 8%, var(--card)); }
+[data-style="soft"] .stat-tile[data-tone="emerald"] { background: color-mix(in oklch, #10b981 8%, var(--card)); }
+[data-style="soft"] .stat-tile[data-tone="slate"] { background: var(--card); }
+[data-style="soft"] .stat-tile .stat-icon { background: var(--card); color: var(--foreground); box-shadow: inset 0 0 0 1px var(--border); }
+
+/* Dark surfaces carry depth by lightness, not shadow. */
+.dark[data-style="glass"] {
+  --surface-card: color-mix(in oklch, var(--card) 62%, transparent);
+  --card-edge: color-mix(in oklch, var(--foreground) 10%, transparent);
+}
+
+@layer components {
+  .surface-card {
+    background-color: var(--surface-card);
+    box-shadow: 0 0 0 1px var(--card-edge), var(--card-shadow);
+    backdrop-filter: blur(var(--card-blur));
+    transition: box-shadow 0.3s var(--ease-apple);
+  }
+  .surface-card:hover {
+    box-shadow: 0 0 0 1px var(--card-edge), var(--card-shadow-hover);
+  }
+  .btn-primary {
+    background: var(--btn-primary-bg);
+    box-shadow: var(--btn-primary-shadow);
+  }
+  .btn-primary:hover {
+    filter: brightness(1.07);
+  }
+  .nav-active {
+    background: var(--nav-active-bg);
+    box-shadow: var(--nav-active-shadow);
+    color: var(--nav-active-fg);
+  }
+  .nav-active-icon {
+    color: var(--nav-active-icon);
+  }
+  .ambient-glow {
+    opacity: calc(var(--glow-opacity) * 0.2);
+  }
+  .ambient-glow-soft {
+    opacity: calc(var(--glow-opacity) * 0.1);
+  }
+}
+
+/* Page titles: one size per style instead of each page's own text-3xl
+   (unlayered on purpose, so it wins over those utilities). */
+/* Long unbroken strings (emails, links) wrap instead of widening the page. */
+main {
+  overflow-wrap: break-word;
+}
+
+main h1 {
+  font-size: var(--page-heading);
+  line-height: 1.2;
+}
+
+/* ---------- 柔光 for everything inside the pages ----------
+   Hand-written boxes, form fields, tables, tabs and pop-ups follow the style
+   too, so no page keeps the old hairline-and-square look. Coloured boxes
+   (warnings, highlights) keep their own colours; only plain ones change. */
+[data-style="soft"] {
+  --soft-tile: color-mix(in oklch, var(--primary) 4%, var(--card));
+  --soft-tile-strong: color-mix(in oklch, var(--primary) 8%, var(--card));
+  --soft-line: color-mix(in oklch, var(--primary) 12%, transparent);
+  --soft-field: color-mix(in oklch, var(--primary) 5%, var(--card));
+}
+.dark[data-style="soft"] {
+  --soft-tile: color-mix(in oklch, white 4%, var(--card));
+  --soft-tile-strong: color-mix(in oklch, white 7%, var(--card));
+  --soft-line: color-mix(in oklch, white 9%, transparent);
+  --soft-field: color-mix(in oklch, white 6%, var(--card));
+}
+
+/* Plain bordered boxes → soft rounded tiles. */
+[data-style="soft"] :is(main, [role="dialog"], [data-slot="sheet-content"]) :is([class~="rounded"], [class~="rounded-sm"], [class~="rounded-md"], [class~="rounded-lg"], [class~="rounded-xl"], [class~="rounded-2xl"])[class~="border"]:not([data-slot]):not(.surface-card):not([class*=" border-"]):not([class^="border-"]) {
+  border-color: var(--soft-line);
+  border-radius: 1rem;
+}
+[data-style="soft"] :is(main, [role="dialog"], [data-slot="sheet-content"]) :is([class~="rounded"], [class~="rounded-sm"], [class~="rounded-md"], [class~="rounded-lg"], [class~="rounded-xl"], [class~="rounded-2xl"])[class~="border"]:not([data-slot]):not(.surface-card):not([class*="bg-"]):not(input):not(select):not(textarea):not(a):not(button) {
+  border-color: transparent;
+  background-color: var(--soft-tile);
+}
+[data-style="soft"] main [class~="border-dashed"] {
+  border-color: color-mix(in oklch, var(--primary) 28%, transparent);
+  border-radius: 1rem;
+}
+[data-style="soft"] main :is([class~="bg-muted"], [class~="bg-muted/20"], [class~="bg-muted/30"], [class~="bg-muted/40"], [class~="bg-muted/50"], [class~="bg-muted/60"], [class~="bg-muted/70"], [class~="bg-background/50"], [class~="bg-background/60"]) {
+  background-color: var(--soft-tile-strong);
+}
+
+/* Form fields: filled, no hard outline, a brand ring on focus. */
+[data-style="soft"] :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], [data-slot="input-group"]),
+[data-style="soft"] main :is(input[type="text"], input[type="search"], input[type="number"], input[type="date"], input[type="month"], input[type="time"], input[type="datetime-local"], input:not([type]), select, textarea):not([data-slot]) {
+  background-color: var(--soft-field);
+  border-color: transparent;
+  border-radius: 0.85rem;
+}
+[data-style="soft"] :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]):focus-visible,
+[data-style="soft"] main :is(input, select, textarea):not([data-slot]):focus-visible {
+  border-color: color-mix(in oklch, var(--primary) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 18%, transparent);
+}
+
+/* Tables: a tinted header row, soft row hover, no grid lines. */
+[data-style="soft"] [data-slot="table-header"] [data-slot="table-row"] {
+  background: var(--soft-tile-strong);
+  border-bottom-color: transparent;
+}
+/* A sticky 操作 column keeps the tint (over an opaque card, for rows scrolling beneath). */
+[data-style="soft"] [data-slot="table-header"] [data-slot="table-head"].sticky { background: linear-gradient(var(--soft-tile-strong), var(--soft-tile-strong)), var(--card); }
+[data-style="soft"] [data-slot="table-header"] [data-slot="table-head"]:first-child { border-top-left-radius: 0.85rem; border-bottom-left-radius: 0.85rem; }
+[data-style="soft"] [data-slot="table-header"] [data-slot="table-head"]:last-child { border-top-right-radius: 0.85rem; border-bottom-right-radius: 0.85rem; }
+[data-style="soft"] [data-slot="table-body"] [data-slot="table-row"] {
+  border-bottom-color: var(--soft-line);
+}
+[data-style="soft"] [data-slot="table-body"] [data-slot="table-row"]:hover {
+  background: var(--soft-tile);
+}
+
+/* Tabs: a pill track, the active one a white chip. */
+[data-style="soft"] [data-slot="tabs-list"] {
+  background: var(--soft-tile-strong);
+  border-radius: 9999px;
+  padding: 4px;
+}
+[data-style="soft"] [data-slot="tabs-trigger"] {
+  border-radius: 9999px;
+}
+[data-style="soft"] [data-slot="tabs-trigger"][data-active],
+[data-style="soft"] [data-slot="tabs-trigger"][aria-selected="true"] {
+  background: var(--card);
+  box-shadow: 0 2px 8px -3px color-mix(in oklch, var(--primary), transparent 65%);
+}
+
+/* Pop-ups and menus float like the cards. */
+[data-style="soft"] :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+  border-radius: 1.75rem;
+  border: none;
+  box-shadow: 0 0 0 1px var(--soft-line), 0 30px 70px -24px color-mix(in oklch, var(--primary), transparent 55%);
+}
+[data-style="soft"] :is([data-slot="dropdown-menu-content"], [data-slot="select-content"], [data-slot="dropdown-menu-sub-content"]) {
+  border-radius: 1.1rem;
+  box-shadow: 0 0 0 1px var(--soft-line), 0 18px 40px -16px color-mix(in oklch, var(--primary), transparent 55%);
+}
+[data-style="soft"] :is([data-slot="dropdown-menu-item"], [data-slot="select-item"]) {
+  border-radius: 0.7rem;
+}
+[data-style="soft"] [data-slot="sheet-content"] {
+  border-top-right-radius: 1.5rem;
+  border-bottom-right-radius: 1.5rem;
+}
+[data-style="soft"] [data-sonner-toast] {
+  border-radius: 1rem !important;
+  box-shadow: 0 0 0 1px var(--soft-line), 0 14px 34px -14px color-mix(in oklch, var(--primary), transparent 55%) !important;
+}
+
+/* 小欧's window in 柔光: a floating panel with a gradient band on top. */
+[data-style="soft"] .assistant-panel {
+  border: none;
+  border-radius: 1.75rem;
+  box-shadow: 0 0 0 1px var(--soft-line), 0 30px 70px -24px color-mix(in oklch, var(--primary), transparent 50%);
+}
+[data-style="soft"] .assistant-head {
+  background: var(--hero-bg);
+  color: var(--primary-foreground);
+  border-bottom: none;
+}
+.dark[data-style="soft"] .assistant-head {
+  background: linear-gradient(135deg, color-mix(in oklch, var(--primary), black 45%), color-mix(in oklch, var(--glow-2), black 50%));
+  color: #fff;
+}
+[data-style="soft"] .assistant-head :is(.text-muted-foreground, [data-slot="button"]) {
+  color: inherit;
+}
+[data-style="soft"] .bubble-user {
+  background: var(--gradient-accent);
+  color: var(--primary-foreground);
+  border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+  margin-left: 2.5rem;
+}
+.dark[data-style="soft"] .bubble-user {
+  color: oklch(0.15 0 0);
+}
+[data-style="soft"] .bubble-ai {
+  background: var(--soft-tile-strong);
+  border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
+  margin-right: 1.5rem;
 }

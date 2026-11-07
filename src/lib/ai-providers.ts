@@ -1,8 +1,12 @@
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
-import { generateStructured, GeminiError, type GeminiSchema } from "@/lib/gemini";
+import { generateStructured, GeminiError, type GeminiFilePart, type GeminiSchema } from "@/lib/gemini";
 import { UserFacingError } from "@/lib/action-result";
-import { AI_PROVIDER_OPTIONS, type AiProviderId } from "@/lib/ai-provider-labels";
+import {
+  AI_PROVIDER_OPTIONS,
+  type AiProviderId,
+  type OpenAiCompatibleProviderId,
+} from "@/lib/ai-provider-labels";
 
 export type { AiProviderId };
 
@@ -15,11 +19,36 @@ const AI_PROVIDERS: Record<AiProviderId, { defaultModel: string }> =
 // format, so one function handles all four — only the base URL and default
 // model actually differ between them. A user can override the base URL per
 // key (see AiKey.baseUrl) for workspace-specific or self-hosted endpoints.
-export const OPENAI_COMPATIBLE_BASE_URL: Record<"openai" | "deepseek" | "kimi" | "qwen", string> = {
+export const OPENAI_COMPATIBLE_BASE_URL: Record<OpenAiCompatibleProviderId, string> = {
   openai: "https://api.openai.com/v1",
   deepseek: "https://api.deepseek.com/v1",
   kimi: "https://api.moonshot.cn/v1",
   qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  xai: "https://api.x.ai/v1",
+  mistral: "https://api.mistral.ai/v1",
+  zhipu: "https://open.bigmodel.cn/api/paas/v4",
+  doubao: "https://ark.cn-beijing.volces.com/api/v3",
+};
+
+/**
+ * DeepSeek/Kimi/Qwen each ship a *separate* model id for vision — unlike
+ * Gemini, where the same gemini-3.x-flash models handle both text and
+ * images, a user's configured (text) model for these three can't read an
+ * image at all. Checked directly against each vendor's current docs
+ * (Aug 2026): DeepSeek's deepseek-v4-flash-vision-exp, Kimi's
+ * moonshot-v1-8k-vision-preview, Qwen's qwen-vl-plus. None of the three
+ * accept a PDF content block — images only (see IMAGE_CAPABLE_PROVIDERS vs
+ * FILE_CAPABLE_PROVIDERS in ai-provider-labels.ts).
+ *
+ * 智谱's glm-4v-flash and Mistral's pixtral-large-latest are the same story —
+ * a dedicated vision model id, confirmed against each vendor's current docs.
+ */
+const VISION_MODEL: Partial<Record<OpenAiCompatibleProviderId, string>> = {
+  deepseek: "deepseek-v4-flash-vision-exp",
+  kimi: "moonshot-v1-8k-vision-preview",
+  qwen: "qwen-vl-plus",
+  zhipu: "glm-4v-flash",
+  mistral: "pixtral-large-latest",
 };
 
 export type UserAiConfig = {
@@ -80,14 +109,26 @@ export function extractJson(text: string): unknown {
   }
 }
 
-async function callOpenAiCompatible(
-  provider: "openai" | "deepseek" | "kimi" | "qwen",
+export async function callOpenAiCompatible(
+  provider: OpenAiCompatibleProviderId,
   apiKey: string,
   model: string,
   prompt: string,
   timeoutMs: number,
-  baseUrlOverride?: string
+  baseUrlOverride?: string,
+  file?: GeminiFilePart
 ): Promise<unknown> {
+  // A vision call always uses the provider's dedicated vision model — the
+  // account's configured text model (e.g. "deepseek-chat") can't read images
+  // at all, so silently sending it a picture would just 400.
+  const effectiveModel = file ? VISION_MODEL[provider] ?? model : model;
+  const content: unknown = file
+    ? [
+        { type: "image_url", image_url: { url: `data:${file.mimeType};base64,${file.data}` } },
+        { type: "text", text: prompt },
+      ]
+    : prompt;
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
@@ -100,13 +141,13 @@ async function callOpenAiCompatible(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model,
+        model: effectiveModel,
         // `prompt` here is already schema-annotated by withSchemaReminder(),
         // which also satisfies OpenAI-compatible APIs' (confirmed on
         // DeepSeek, same documented behavior on OpenAI) requirement that the
         // literal word "json" appear somewhere in the prompt to use
         // response_format: json_object.
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content }],
         response_format: { type: "json_object" },
         // Without this, DeepSeek/OpenAI/Kimi/Qwen fall back to their own
         // (commonly 4096-token) default — a multi-question interview Q&A
@@ -118,7 +159,7 @@ async function callOpenAiCompatible(
       }),
     });
   } catch {
-    throw new UserFacingError("AI 请求超时，请稍后重试");
+    throw new UserFacingError(`${provider} · ${effectiveModel} 没有响应（超时或网络不通），请稍后重试`);
   } finally {
     clearTimeout(timeout);
   }
@@ -127,12 +168,12 @@ async function callOpenAiCompatible(
     const detail = await response.text().catch(() => "");
     console.error(`[${provider}] ${response.status}`, detail.slice(0, 500));
     if (response.status === 401 || response.status === 403) {
-      throw new UserFacingError("API Key 无效，请检查账号设置里的 AI 配置");
+      throw new UserFacingError(`${provider} · ${effectiveModel}：API Key 无效，请检查账号设置里的 AI 配置`);
     }
     if (response.status === 429) {
-      throw new UserFacingError("API 调用超限，请稍后重试");
+      throw new UserFacingError(`${provider} · ${effectiveModel}：API 调用超限（额度或频率），请稍后重试，或在设置里换一个模型`);
     }
-    throw new UserFacingError("AI 服务暂时不可用，请稍后重试");
+    throw new UserFacingError(`${provider} · ${effectiveModel} 调用失败（${response.status}）：服务暂时不可用，请稍后重试，或在设置里换一个模型`);
   }
 
   const data = await response.json();
@@ -176,7 +217,7 @@ async function callAnthropic(
       }),
     });
   } catch {
-    throw new UserFacingError("AI 请求超时，请稍后重试");
+    throw new UserFacingError(`Claude · ${model} 没有响应（超时或网络不通），请稍后重试`);
   } finally {
     clearTimeout(timeout);
   }
@@ -185,12 +226,12 @@ async function callAnthropic(
     const detail = await response.text().catch(() => "");
     console.error(`[anthropic] ${response.status}`, detail.slice(0, 500));
     if (response.status === 401) {
-      throw new UserFacingError("API Key 无效，请检查账号设置里的 AI 配置");
+      throw new UserFacingError(`Claude · ${model}：API Key 无效，请检查账号设置里的 AI 配置`);
     }
     if (response.status === 429) {
-      throw new UserFacingError("API 调用超限，请稍后重试");
+      throw new UserFacingError(`Claude · ${model}：API 调用超限（额度或频率），请稍后重试，或在设置里换一个模型`);
     }
-    throw new UserFacingError("AI 服务暂时不可用，请稍后重试");
+    throw new UserFacingError(`Claude · ${model} 调用失败（${response.status}）：服务暂时不可用，请稍后重试，或在设置里换一个模型`);
   }
 
   const data = await response.json();
@@ -240,6 +281,10 @@ export async function callTextAi({
     case "deepseek":
     case "kimi":
     case "qwen":
+    case "xai":
+    case "mistral":
+    case "zhipu":
+    case "doubao":
       return callOpenAiCompatible(
         config.provider,
         config.apiKey,

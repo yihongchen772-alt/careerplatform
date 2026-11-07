@@ -2,7 +2,10 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { MockInterviewChat } from "@/components/mock-interview/chat";
+import { BackLink } from "@/components/ui/back-link";
 import type { InterviewFeedback } from "@/lib/validation";
+import { PageHero } from "@/components/layout/page-hero";
+import { MessageSquare } from "lucide-react";
 
 export default async function MockInterviewDetailPage({
   params,
@@ -24,16 +27,12 @@ export default async function MockInterviewDetailPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">
-          {session.position
-            ? `${session.position.company.name} · ${session.position.title}`
-            : session.targetRole || "模拟面试"}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          简历版本：{session.resumeVersion.name}
-        </p>
-      </div>
+      <PageHero
+        title={session.position ? `${session.position.company.name} · ${session.position.title}` : session.targetRole || "模拟面试"}
+        description={`简历版本：${session.resumeVersion.name}`}
+        icon={MessageSquare}
+        back={<BackLink href="/mock-interview" label="返回模拟面试" />}
+      />
 
       <MockInterviewChat
         sessionId={session.id}
@@ -45,6 +44,7 @@ export default async function MockInterviewDetailPage({
         }))}
         initialStatus={session.status}
         initialFeedback={session.feedback as InterviewFeedback | null}
+        includeCoding={session.includeCoding}
       />
     </div>
   );

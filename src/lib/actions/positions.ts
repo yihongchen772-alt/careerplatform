@@ -5,24 +5,28 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { positionSchema } from "@/lib/validation";
 import { computeInterestScore } from "@/lib/scoring";
+import { resolveCompanyId } from "@/lib/company-resolver";
 import { z } from "zod";
 
-export async function createPosition(input: z.infer<typeof positionSchema>) {
+export async function createPosition(input: z.infer<typeof positionSchema>, captureKey?: string) {
   const user = await requireUser();
   const data = positionSchema.parse(input);
 
-  const company = await db.company.upsert({
-    where: { name: data.companyName },
-    update: {},
-    create: { name: data.companyName },
-  });
+  if (captureKey) {
+    z.string().uuid().parse(captureKey);
+    const saved = await db.position.findUnique({ where: { captureKey } });
+    if (saved?.userId === user.id) return saved.id;
+  }
+  const companyId = await resolveCompanyId(data.companyName, { aiUserId: user.id });
 
-  await db.position.create({
-    data: {
+  const createData = {
       userId: user.id,
-      companyId: company.id,
+      captureKey,
+      companyId,
       title: data.title,
+      recruitmentType: data.recruitmentType,
       track: data.track,
+      department: data.department,
       location: data.location,
       salaryMin: data.salaryMin ?? undefined,
       salaryMax: data.salaryMax ?? undefined,
@@ -30,14 +34,17 @@ export async function createPosition(input: z.infer<typeof positionSchema>) {
       jdUrl: data.jdUrl,
       source: data.source,
       deadline: data.deadline ?? undefined,
-      status: data.status ?? "EVALUATING",
+      status: data.status ?? "EVALUATING" as const,
       scoreBreakdown: data.scoreBreakdown ?? undefined,
       interestScore: computeInterestScore(data.scoreBreakdown),
-    },
-  });
+  };
+  const created = captureKey
+    ? await db.position.upsert({ where: { captureKey }, create: createData, update: {} })
+    : await db.position.create({ data: createData });
 
   revalidatePath("/pool");
   revalidatePath("/dashboard");
+  return created.id;
 }
 
 export async function updatePosition(
@@ -52,12 +59,7 @@ export async function updatePosition(
 
   let companyId = existing.companyId;
   if (data.companyName) {
-    const company = await db.company.upsert({
-      where: { name: data.companyName },
-      update: {},
-      create: { name: data.companyName },
-    });
-    companyId = company.id;
+    companyId = await resolveCompanyId(data.companyName, { aiUserId: user.id });
   }
 
   const mergedBreakdown = data.scoreBreakdown
@@ -69,7 +71,9 @@ export async function updatePosition(
     data: {
       companyId,
       title: data.title,
+      recruitmentType: data.recruitmentType,
       track: data.track,
+      department: data.department,
       location: data.location,
       salaryMin: data.salaryMin ?? undefined,
       salaryMax: data.salaryMax ?? undefined,
@@ -97,7 +101,7 @@ export async function deletePosition(id: string) {
 
 export async function markPositionApplied(
   id: string,
-  input: { appliedDate: Date; referrer?: string; resumeVersionId?: string }
+  input: { appliedDate: Date; referrer?: string; resumeVersionId?: string; applyUrl?: string | null }
 ) {
   const user = await requireUser();
   const position = await db.position.findFirst({
@@ -105,13 +109,21 @@ export async function markPositionApplied(
     include: { company: true },
   });
   if (!position) throw new Error("未找到该岗位");
+  const applyUrl = input.applyUrl && /^https?:\/\//i.test(input.applyUrl) ? input.applyUrl.slice(0, 2000) : null;
 
   await db.$transaction(async (tx) => {
+    // Same rule as createApplication: a company with exactly one 进度页 gets
+    // the new application linked to it, or 进度同步 would never match it.
+    const portals = await tx.applicationPortal.findMany({ where: { companyId: position.companyId }, select: { id: true }, take: 2 });
     const application = await tx.application.create({
       data: {
         userId: user.id,
         positionId: position.id,
+        jdSnapshot: position.jdText?.trim() || null,
+        jdSnapshotUrl: position.jdText?.trim() ? position.jdUrl : null,
         companyId: position.companyId,
+        portalId: portals.length === 1 ? portals[0].id : null,
+        applyUrl,
         title: position.title,
         appliedDate: input.appliedDate,
         referrer: input.referrer,
@@ -129,6 +141,9 @@ export async function markPositionApplied(
         stage: "APPLIED",
       },
     });
+    if (application.portalId) {
+      await tx.applicationPortal.update({ where: { id: application.portalId }, data: { contentHash: null } });
+    }
 
     await tx.position.update({
       where: { id: position.id },
@@ -143,7 +158,7 @@ export async function markPositionApplied(
 
 export async function markPositionsApplied(
   ids: string[],
-  input: { appliedDate: Date; referrer?: string; resumeVersionId?: string }
+  input: { appliedDate: Date; referrer?: string; source?: string; resumeVersionId?: string }
 ) {
   const user = await requireUser();
   const positions = await db.position.findMany({
@@ -156,11 +171,19 @@ export async function markPositionsApplied(
         data: {
           userId: user.id,
           positionId: position.id,
+          jdSnapshot: position.jdText?.trim() || null,
+          jdSnapshotUrl: position.jdText?.trim() ? position.jdUrl : null,
           companyId: position.companyId,
           title: position.title,
           appliedDate: input.appliedDate,
           referrer: input.referrer,
-          source: position.source,
+          // Explicit input wins — the position's own 渠道 (set back when it
+          // was added to the pool, if at all) is only a fallback for a
+          // single-position mark-applied, handled by the dialog prefilling
+          // `defaultSource` rather than here, so a batch mark-applied over
+          // several positions with different sources never silently
+          // overwrites what the user actually typed with one of theirs.
+          source: input.source,
           resumeVersionId: input.resumeVersionId,
           currentStage: "APPLIED",
           salaryMin: position.salaryMin,

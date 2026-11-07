@@ -1,8 +1,8 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { upload } from "@vercel/blob/client";
 import { Upload, FileText, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -109,7 +109,7 @@ export function LibraryView({ files }: { files: LibraryFile[] }) {
             }}
           />
           <p className="text-xs text-muted-foreground">
-            PDF、图片、Word/PPT/Excel、zip、txt，单个 25MB 以内。
+            PDF、图片、Word/PPT/Excel、zip、txt，单个 25MB 以内。文件会上传到云端存储。
           </p>
         </CardContent>
       </Card>
@@ -180,7 +180,7 @@ function FileCard({ file }: { file: LibraryFile }) {
           </Link>
         )}
         <p className="mt-0.5 text-xs text-muted-foreground">
-          {new Date(file.createdAt).toLocaleDateString()}
+          {new Date(file.createdAt).toLocaleDateString("zh-CN")}
         </p>
       </div>
       <ConfirmDeleteButton

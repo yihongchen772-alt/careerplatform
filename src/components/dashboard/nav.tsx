@@ -1,30 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { signOut } from "next-auth/react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
 import {
-  BookOpen,
-  Brain,
-  Building2,
   CalendarDays,
-  ClipboardList,
+  Database,
   FileText,
-  FolderOpen,
+ 
   LayoutDashboard,
-  Library,
   ListChecks,
   Menu,
   MessageSquare,
-  Scale,
   Search,
   Send,
   Settings,
   TrendingUp,
-  UsersRound,
+  Wrench,
+  Moon,
+  Sun,
   type LucideIcon,
 } from "lucide-react";
+import { useThemeSettings } from "@/components/theme-provider";
+import { TOOL_LINKS } from "@/lib/nav-tools";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -33,73 +32,104 @@ import { BrandMark } from "@/components/brand-mark";
 
 type NavLink = { href: string; label: string; icon: LucideIcon };
 
-const overview: NavLink = { href: "/dashboard", label: "总览", icon: LayoutDashboard };
+type Today = { count: number; labels: string[] };
 
-const groups: { label: string; links: NavLink[] }[] = [
+/**
+ * How many 面试 / 笔试 are today, for the badge beside 投递记录. Polled: the
+ * sidebar stays mounted across pages, so it would otherwise never change.
+ */
+function useTodaySchedule(): Today {
+  const [today, setToday] = useState<Today>({ count: 0, labels: [] });
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const res = await fetch("/api/upcoming?days=1", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { today: number; items: { label: string; relative: string; source: string }[] };
+        if (alive) setToday({ count: data.today, labels: data.items.filter((item) => item.source !== "mail").slice(0, 4).map((item) => `${item.label}（${item.relative}）`) });
+      } catch {
+        // Offline or starting up: keep what is shown.
+      }
+    }
+    const first = setTimeout(load, 0);
+    const timer = setInterval(load, 60_000);
+    window.addEventListener("focus", load);
+    return () => { alive = false; clearTimeout(first); clearInterval(timer); window.removeEventListener("focus", load); };
+  }, []);
+  return today;
+}
+
+// Grouped by what the applicant is doing: the daily loop first, then finding
+// openings, preparing, looking back. Tools used now and then sit behind 工具箱
+// (/tools), so the list stays short. 设置 sits at the bottom.
+const groups: { label: string | null; links: NavLink[] }[] = [
   {
-    label: "求职工具",
+    label: null,
     links: [
-      { href: "/leads", label: "秋招信息库", icon: ClipboardList },
-      { href: "/pool", label: "候选岗位池", icon: ListChecks },
+      { href: "/dashboard", label: "总览", icon: LayoutDashboard },
       { href: "/applications", label: "投递记录", icon: Send },
-      { href: "/contacts", label: "联系人", icon: UsersRound },
+      { href: "/pool", label: "候选岗位池", icon: ListChecks },
+      { href: "/calendar", label: "日历", icon: CalendarDays },
+    ],
+  },
+  {
+    label: "找岗位",
+    links: [
+      { href: "/leads", label: "秋招信息库", icon: Database },
+    ],
+  },
+  {
+    label: "准备与复盘",
+    links: [
       { href: "/mock-interview", label: "AI 模拟面试", icon: MessageSquare },
-      { href: "/interviews", label: "面经库", icon: BookOpen },
-      { href: "/question-banks", label: "题库", icon: Library },
-      { href: "/calendar", label: "日历视图", icon: CalendarDays },
-      { href: "/insights", label: "转化率", icon: TrendingUp },
-      { href: "/compare", label: "Offer 对比", icon: Scale },
-    ],
-  },
-  {
-    label: "资源",
-    links: [
-      { href: "/companies", label: "企业名录", icon: Building2 },
       { href: "/resumes", label: "简历版本", icon: FileText },
-      { href: "/library", label: "资料库", icon: FolderOpen },
-    ],
-  },
-  {
-    label: "账号",
-    links: [
-      { href: "/settings", label: "账号设置", icon: Settings },
-      { href: "/personality", label: "性格测试", icon: Brain },
+      { href: "/insights", label: "转化率", icon: TrendingUp },
     ],
   },
 ];
 
-const allLinks = [overview, ...groups.flatMap((g) => g.links)];
+const toolsLink: NavLink = { href: "/tools", label: "工具箱", icon: Wrench };
+
+const settingsLink: NavLink = { href: "/settings", label: "设置", icon: Settings };
+
+const allLinks = [...groups.flatMap((g) => g.links), toolsLink, ...TOOL_LINKS, settingsLink];
 
 export function currentPageLabel(pathname: string): string {
   const match = allLinks
     .filter((l) => pathname.startsWith(l.href))
     .sort((a, b) => b.href.length - a.href.length)[0];
-  return match?.label ?? "秋招追踪";
+  return match?.label ?? "求职罗盘";
 }
 
 function NavItem({
   link,
   active,
   onNavigate,
+  badge,
 }: {
   link: NavLink;
   active: boolean;
   onNavigate?: () => void;
+  badge?: { text: string; title: string } | null;
 }) {
   const Icon = link.icon;
   return (
     <Link
       href={link.href}
       onClick={onNavigate}
+      title={badge?.title}
+      aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-2.5 rounded-full px-3.5 py-2 text-sm font-medium transition-all duration-200 ease-(--ease-apple)",
+        "flex h-[32px] items-center gap-2.5 rounded-xl px-3 text-[13px] transition-colors duration-150",
         active
-          ? "bg-[image:var(--gradient-accent)] text-primary-foreground shadow-[0_2px_10px_-3px_color-mix(in_oklch,var(--glow-1),transparent_35%)]"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          ? "nav-active font-medium"
+          : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
       )}
     >
-      <Icon className="size-4 shrink-0" />
+      <Icon className={cn("size-4 shrink-0", active && "nav-active-icon")} strokeWidth={active ? 2 : 1.7} />
       {link.label}
+      {badge && <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-amber-700 dark:text-amber-300">{badge.text}</span>}
     </Link>
   );
 }
@@ -114,66 +144,81 @@ function NavContent({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const isActive = (href: string) => pathname.startsWith(href);
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const today = useTodaySchedule();
+  const todayBadge = today.count > 0 ? { text: `今天 ${today.count}`, title: `今天的安排：\n${today.labels.join("\n")}` } : null;
 
   return (
-    <div className="flex h-full flex-col justify-between p-4">
-      <div className="space-y-6">
-        <div className="flex items-center gap-2.5 px-2 text-lg font-semibold tracking-tight">
-          <BrandMark className="size-7 shrink-0 rounded-xl shadow-[0_3px_10px_-2px_color-mix(in_oklch,var(--glow-1),transparent_20%)]" />
-          秋招追踪
-        </div>
+    <div className="flex h-full flex-col px-3 py-4">
+      <div className="flex items-center gap-2 px-2.5 text-[15px] font-semibold tracking-tight">
+        <BrandMark className="size-6 shrink-0 rounded-md" />
+        求职罗盘
+      </div>
 
-        <button
-          type="button"
-          onClick={onSearchClick}
-          className="flex w-full items-center gap-2.5 rounded-full border bg-background/60 px-3.5 py-2 text-sm text-muted-foreground transition-all duration-200 ease-(--ease-apple) hover:border-ring/40 hover:bg-muted hover:text-foreground"
-        >
-          <Search className="size-4 shrink-0" />
-          搜索...
-          <span className="ml-auto hidden text-xs text-muted-foreground/70 md:inline">
-            ⌘/Ctrl K
-          </span>
-        </button>
+      <button
+        type="button"
+        onClick={onSearchClick}
+        className="mt-3 flex h-8 w-full items-center gap-2 rounded-md bg-foreground/[0.04] px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/[0.07] hover:text-foreground"
+      >
+        <Search className="size-3.5 shrink-0" />
+        搜索
+        <kbd className="ml-auto hidden font-sans text-[11px] text-muted-foreground/70 md:inline">⌘K</kbd>
+      </button>
 
-        <nav className="space-y-1">
-          <NavItem
-            link={overview}
-            active={isActive(overview.href)}
-            onNavigate={onNavigate}
-          />
-        </nav>
-
+      <nav aria-label="主导航" className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
         {groups.map((group) => (
-          <div key={group.label} className="space-y-1">
-            <p className="px-3 text-xs font-medium text-muted-foreground/70">
-              {group.label}
-            </p>
-            <nav className="space-y-1">
-              {group.links.map((link) => (
-                <NavItem
-                  key={link.href}
-                  link={link}
-                  active={isActive(link.href)}
-                  onNavigate={onNavigate}
-                />
-              ))}
-            </nav>
+          <div key={group.label ?? "main"} className="space-y-0.5">
+            {group.label && <p className="px-2.5 pb-0.5 text-[11px] font-medium text-muted-foreground/60">{group.label}</p>}
+            {group.links.map((link) => (
+              <NavItem
+                key={link.href}
+                link={link}
+                active={isActive(link.href)}
+                onNavigate={onNavigate}
+                badge={link.href === "/applications" ? todayBadge : null}
+              />
+            ))}
           </div>
         ))}
-      </div>
-      <div className="space-y-2 border-t pt-4">
-        <p className="truncate px-2 text-xs text-muted-foreground">{userLabel}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={() => signOut({ callbackUrl: "/login" })}
-        >
-          退出登录
-        </Button>
+        <div className="space-y-0.5">
+          <NavItem link={toolsLink} active={isActive(toolsLink.href) || TOOL_LINKS.some((link) => isActive(link.href))} onNavigate={onNavigate} />
+        </div>
+      </nav>
+
+      <div className="mt-2 space-y-0.5 border-t border-(--sidebar-edge) pt-2">
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1"><NavItem link={settingsLink} active={isActive(settingsLink.href)} onNavigate={onNavigate} /></div>
+          <ThemeToggle />
+        </div>
+        <div className="flex items-center justify-between gap-2 px-2.5 pt-1">
+          <p className="min-w-0 truncate text-[11px] text-muted-foreground/70">{userLabel}</p>
+          <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground">退出登录</button>
+        </div>
       </div>
     </div>
+  );
+}
+
+/** Light / dark in one click; 跟随系统 and the rest are in 设置 → 外观. */
+function ThemeToggle() {
+  const { mode, setMode } = useThemeSettings();
+  // The system setting, read in the browser; the server renders it as light.
+  const systemDark = useSyncExternalStore(
+    (change) => { const query = window.matchMedia("(prefers-color-scheme: dark)"); query.addEventListener("change", change); return () => query.removeEventListener("change", change); },
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+    () => false,
+  );
+  const dark = mode === "dark" || (mode === "system" && systemDark);
+  return (
+    <button
+      type="button"
+      onClick={() => setMode(dark ? "light" : "dark")}
+      aria-label={dark ? "切换到浅色模式" : "切换到深色模式"}
+      title={dark ? "切换到浅色模式" : "切换到深色模式"}
+      className="grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+    >
+      {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+    </button>
   );
 }
 
@@ -191,7 +236,7 @@ export function DashboardNav({ userLabel }: { userLabel: string }) {
           rather than a flat fill, the way macOS's own sidebar material
           reads as a distinct layer floating over the content instead of a
           solid panel butted up against it. */}
-      <aside className="hidden w-56 shrink-0 border-r border-border/60 bg-sidebar/80 backdrop-blur-xl md:block">
+      <aside className="app-sidebar hidden w-56 shrink-0 border-r border-(--sidebar-edge) bg-(--sidebar-surface) backdrop-blur-xl md:block print:hidden">
         <div className="sticky top-0 h-screen overflow-y-auto">
           <NavContent
             userLabel={userLabel}
@@ -203,7 +248,7 @@ export function DashboardNav({ userLabel }: { userLabel: string }) {
       {/* Mobile top bar */}
       {/* h-14 is the bar itself; the notch inset is added as padding on top, so
           the real height is 3.5rem + inset — layout's pt must match. */}
-      <header className="fixed inset-x-0 top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-2 border-b bg-card/80 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
+      <header className="fixed inset-x-0 top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-2 border-b bg-card/80 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden print:hidden">
         <Button
           variant="ghost"
           size="icon"

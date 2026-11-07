@@ -1,13 +1,16 @@
 "use server";
 
+import { todayKey } from "@/lib/dates";
+import { trackLabel } from "@/lib/analytics";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { getUserAiConfig, callTextAi } from "@/lib/ai-providers";
-import { getFileSearchKey, generateStructuredWithFile } from "@/lib/ai-file-search";
+import { getImageSearchKey, generateStructuredWithFile } from "@/lib/ai-file-search";
 import { getResumeContext } from "@/lib/resume-context";
 import { computeInterestScore } from "@/lib/scoring";
+import { resolveCompanyIds } from "@/lib/company-resolver";
 import { toActionResult, UserFacingError, type ActionResult } from "@/lib/action-result";
 import {
   sheetToText,
@@ -92,9 +95,10 @@ const SCREENSHOT_MIME: Record<string, string> = {
  * makes selection awkward — and it's the only way to capture posts whose
  * information is baked into an image rather than the caption.
  *
- * Needs a file-capable provider (Gemini/Claude/OpenAI); DeepSeek/Kimi/Qwen
- * can't read images at all, so this deliberately errors rather than falling
- * back to the text path, where they'd "succeed" having read nothing.
+ * Needs an image-capable provider (getImageSearchKey — all six now that
+ * DeepSeek/Kimi/Qwen have shipped vision models); errors rather than falling
+ * back to the text path, where an incapable provider would "succeed" having
+ * read nothing.
  */
 export async function parseRecruitmentScreenshot(
   fileBase64: string,
@@ -111,14 +115,12 @@ export async function parseRecruitmentScreenshot(
       throw new UserFacingError("图片不能超过 10MB");
     }
 
-    const config = await getFileSearchKey(user.id);
+    const config = await getImageSearchKey(user.id);
     if (!config) {
-      throw new UserFacingError(
-        "读截图需要能看图的服务商，去账号设置配一个 Gemini、Claude 或 OpenAI 的 Key（DeepSeek/Kimi/Qwen 读不了图片）"
-      );
+      throw new UserFacingError("读截图需要能看图的服务商，去账号设置配一个 AI Key（这几家都能读图片）");
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayKey();
     const raw = await generateStructuredWithFile({
       config,
       file: { mimeType, data: fileBase64 },
@@ -198,7 +200,7 @@ async function extractPositions(
     // The model has no clock, so a bare "10.15" gets a guessed (usually
     // training-era, i.e. past) year — which would make every imported
     // deadline look long overdue to the reminder logic. Give it today.
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayKey();
 
     const intro =
       kind === "sheet"
@@ -293,8 +295,9 @@ export type PositionFit = { index: number; fitScore: number; reason: string };
  * Scores every parsed row against the resume in ONE call, rather than reusing
  * the existing per-position matchResumesToPosition (which reads the resume
  * PDF once per position — fine for one position, but 60 imported rows would
- * mean 60 file-reading calls). The resume here is the cached 体检 summary
- * text, so this also works on providers that can't read files at all.
+ * mean 60 file-reading calls). The resume here is the cached extracted-text
+ * summary (getResumeContext), so this also works on providers that can't
+ * read files at all.
  */
 export async function rankImportedPositions(
   rows: ImportedPosition[],
@@ -419,7 +422,7 @@ export async function importLeads(
           userId: user.id,
           companyName,
           title,
-          track: row.track ?? undefined,
+          track: trackLabel(row.track) ?? undefined,
           department: row.department ?? undefined,
           location: row.location ?? undefined,
           salaryMin: row.salaryMin ?? undefined,
@@ -453,6 +456,13 @@ export async function promoteLeads(
       where: { id: { in: leadIds }, userId: user.id },
     });
 
+    // Resolved once for the whole batch — a multi-lead promotion should pay
+    // for at most one AI-assisted dedup call total, not one per lead.
+    const companyIdByName = await resolveCompanyIds(
+      leads.map((l) => l.companyName),
+      { aiUserId: user.id, addedByUserId: user.id }
+    );
+
     let created = 0;
     let skipped = 0;
 
@@ -462,14 +472,10 @@ export async function promoteLeads(
         continue;
       }
 
-      const company = await db.company.upsert({
-        where: { name: lead.companyName },
-        update: {},
-        create: { name: lead.companyName, addedByUserId: user.id },
-      });
+      const companyId = companyIdByName.get(lead.companyName.trim())!;
 
       const existing = await db.position.findFirst({
-        where: { userId: user.id, companyId: company.id, title: lead.title },
+        where: { userId: user.id, companyId, title: lead.title },
         select: { id: true },
       });
       if (existing) {
@@ -490,9 +496,9 @@ export async function promoteLeads(
       const position = await db.position.create({
         data: {
           userId: user.id,
-          companyId: company.id,
+          companyId,
           title: lead.title,
-          track: lead.track ?? undefined,
+          track: trackLabel(lead.track) ?? undefined,
           department: lead.department ?? undefined,
           location: lead.location ?? undefined,
           salaryMin: lead.salaryMin ?? undefined,
@@ -619,7 +625,7 @@ export async function refineImportedRows(
     const config = await getUserAiConfig(user.id);
     if (!config) throw new UserFacingError("先去账号设置配置一个 AI Key");
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayKey();
 
     const positions = await inBatches(rows, REFINE_BATCH, REFINE_CONCURRENCY, async (batch) => {
     const listing = batch

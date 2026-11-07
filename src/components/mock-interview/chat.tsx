@@ -12,18 +12,47 @@ import {
   type InterviewMessageDTO,
 } from "@/lib/actions/interview-session";
 import type { InterviewFeedback } from "@/lib/validation";
-import { startRecording, type Recorder } from "@/lib/audio-recorder";
+import { startRecording, MicAccessDeniedError, type Recorder } from "@/lib/audio-recorder";
+
+/**
+ * Splits on ```fenced``` blocks so pasted/discussed code renders in a
+ * monospace block instead of the same proportional-font paragraph as
+ * everything else — plain whitespace-pre-wrap keeps indentation but not
+ * alignment, which matters for actually reading code.
+ */
+function renderMessageContent(content: string) {
+  const parts = content.split(/```[a-zA-Z]*\n?([\s\S]*?)```/g);
+  // String.split with a capturing group alternates [text, code, text, code, ...text].
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <pre
+        key={i}
+        className="my-1.5 overflow-x-auto rounded-md bg-background/80 p-2 font-mono text-xs"
+      >
+        {part}
+      </pre>
+    ) : (
+      part && (
+        <p key={i} className="whitespace-pre-wrap">
+          {part}
+        </p>
+      )
+    )
+  );
+}
 
 export function MockInterviewChat({
   sessionId,
   initialMessages,
   initialStatus,
   initialFeedback,
+  includeCoding,
 }: {
   sessionId: string;
   initialMessages: InterviewMessageDTO[];
   initialStatus: "ACTIVE" | "ENDED";
   initialFeedback: InterviewFeedback | null;
+  includeCoding: boolean;
 }) {
   const [messages, setMessages] = useState(initialMessages);
   const [status, setStatus] = useState(initialStatus);
@@ -57,9 +86,9 @@ export function MockInterviewChat({
       setRecorder(null);
       setTranscribing(true);
       try {
-        const wav = await active.stop();
+        const recording = await active.stop();
         const form = new FormData();
-        form.append("audio", new File([wav], "answer.wav", { type: "audio/wav" }));
+        form.append("audio", recording, recording.type === "audio/webm" ? "answer.webm" : "answer.wav");
         const res = await fetch("/api/interview/transcribe", { method: "POST", body: form });
         const json = await res.json();
         if (!res.ok) {
@@ -81,11 +110,17 @@ export function MockInterviewChat({
     }
 
     try {
-      const started = await startRecording();
+      const started = await startRecording({ preferCompressed: true });
       setSeconds(0);
       setRecorder(started);
-    } catch {
-      toast.error("打不开麦克风——检查一下系统里有没有给这个 App 麦克风权限");
+    } catch (err) {
+      if (err instanceof MicAccessDeniedError) {
+        toast.error("系统没给这个 App 麦克风权限，录了也是静音——去系统设置里开一下", {
+          action: { label: "打开系统设置", onClick: () => window.desktopMic?.openSettings() },
+        });
+      } else {
+        toast.error("打不开麦克风——检查一下系统里有没有给这个 App 麦克风权限");
+      }
     }
   }
 
@@ -143,7 +178,7 @@ export function MockInterviewChat({
               <p className="mb-1 text-xs font-medium text-muted-foreground">
                 {m.role === "ASSISTANT" ? "面试官" : "我"}
               </p>
-              <p className="whitespace-pre-wrap">{m.content}</p>
+              {renderMessageContent(m.content)}
               {m.deliveryNote && (
                 <p className="mt-1.5 flex items-start gap-1 text-xs text-muted-foreground">
                   <Mic className="mt-0.5 size-3 shrink-0" />
@@ -163,7 +198,11 @@ export function MockInterviewChat({
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="打字回答，或点下面的「说」直接开口答..."
+            placeholder={
+              includeCoding
+                ? "打字回答，代码可以直接粘贴/写在这里（用 ``` 包起来会按代码块显示），或点下面的「说」直接开口答..."
+                : "打字回答，或点下面的「说」直接开口答..."
+            }
             rows={4}
             disabled={sending}
           />
@@ -201,7 +240,9 @@ export function MockInterviewChat({
           <p className="text-xs text-muted-foreground">
             {recorder
               ? "正在录音，说完点「停止」。真实面试一道题一般 1-2 分钟。"
-              : "口头作答会连语速、流利度、口头禅一起评——这些打字看不出来。转写出来可以改完再发。需要 Gemini 的 Key。"}
+              : includeCoding
+                ? "口头作答会连语速、流利度、口头禅一起评——这些打字看不出来。转写出来可以改完再发。遇到代码题直接把代码打字贴进来就行，不用口头念代码。需要 Gemini 的 Key。"
+                : "口头作答会连语速、流利度、口头禅一起评——这些打字看不出来。转写出来可以改完再发。需要 Gemini 的 Key。"}
           </p>
         </div>
       ) : (

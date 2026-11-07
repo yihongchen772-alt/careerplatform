@@ -25,16 +25,14 @@ export type InterviewMessageDTO = {
   deliveryNote?: string | null;
 };
 
-/** Every AI feature requires the user's own key (callTextAi/generateStructured
- * throw a generic version of this same error) — this just gives the mock
- * interview's specific reason up front, before the session even starts,
- * since a real back-and-forth chat calls the model several times per
- * session rather than once. */
+/** Real back-and-forth chat — several AI calls per session, so it needs the
+ * user's own key rather than the shared quota. The one-shot 面试攻略/题库
+ * features stay on shared quota; this one doesn't. */
 async function requireOwnAiConfig(userId: string) {
   const config = await getUserAiConfig(userId);
   if (!config) {
     throw new UserFacingError(
-      "模拟面试对话需要先在「账号设置」里配置你自己的 AI API Key —— 一次对话要调用好几次模型"
+      "先在「账号设置」里配置你自己的 AI API Key 才能用模拟面试对话"
     );
   }
   return config;
@@ -91,7 +89,11 @@ ${jobDescription}
 候选人简历情况：
 ${resumeText}
 
-请提出第一个面试问题——通常从自我介绍或者简历里最突出的一段经历切入。只返回这一个问题本身，不要加"你好"之类的寒暄，不要一次问多个问题。用中文。`;
+请提出第一个面试问题——通常从自我介绍或者简历里最突出的一段经历切入。只返回这一个问题本身，不要加"你好"之类的寒暄，不要一次问多个问题。用中文。${
+    data.includeCoding
+      ? "\n\n第一题不用出代码题，先从自我介绍/经历切入，代码题留到后面几轮。"
+      : ""
+  }`;
 
   const raw = await callTextAi({
     config,
@@ -112,6 +114,8 @@ ${resumeText}
       resumeVersionId: data.resumeVersionId,
       positionId: data.positionId || undefined,
       targetRole: data.positionId ? undefined : data.targetRole || undefined,
+      includeCoding: data.includeCoding ?? false,
+      focusMix: data.focusMix || undefined,
     },
   });
   const message = await db.interviewMessage.create({
@@ -176,6 +180,16 @@ ${transcript}
     turnsSoFar >= MAX_TURNS_HINT
       ? "已经问了不少轮了，如果候选人的回答已经比较完整，可以说明面试差不多了，问最后一个综合性问题，或者直接说可以结束面试了。"
       : ""
+  }${
+    session.includeCoding
+      ? "\n\n这场面试要包含代码题：找合适的时机（不用每轮都出）出一道 LeetCode 风格的算法/编程题，让候选人直接把代码写在对话框里（文字或代码块都行）。" +
+        "如果候选人上一轮的回答里包含代码，要像 code review 一样认真检查——逻辑是否正确、边界条件有没有漏、时间/空间复杂度怎么样，明确指出具体的 bug 或可以优化的地方，不要只说\"写得不错\"这种空话。" +
+        "但你不是真的在跑代码、也没有测试用例——不要说\"我运行了一下\"这类话，只做代码层面的推理和讨论。"
+      : ""
+  }${
+    session.focusMix
+      ? `\n\n根据候选人过往面试表现分析出的针对性练习配比：${session.focusMix}——出题时优先覆盖占比高的类别，不用严格按百分比出题数量，大方向覆盖到就行。`
+      : ""
   }只返回你要说的这一段话（可能包含点评+下一个问题），不要写"面试官："这样的前缀。用中文。`;
 
   const raw = await callTextAi({
@@ -229,7 +243,7 @@ async function runEnd(sessionId: string) {
 
   // Spoken answers carry a delivery note the transcript can't show. Folding
   // it in here is the whole reason it's stored: a written-out answer can read
-  // fine while the actual delivery was full of "呃" and long pauses.
+  // fine while the actual delivery was full of "呃" and 40-second pauses.
   const transcript = session.messages
     .map((m) => {
       const who = m.role === "ASSISTANT" ? "面试官" : "候选人";
@@ -261,6 +275,10 @@ ${
       ? "\n这场面试里有 " +
         spokenCount +
         " 个回答是口头作答的，对话记录里带了「口头表达」的观察。评价时把表达方式也算进去（语速、流利度、口头禅、停顿），并在 improvements 里给出可练的具体建议——这是打字面试看不出来的部分，别忽略。"
+      : ""
+  }${
+    session.includeCoding
+      ? "\n如果对话里有代码题，评价时单独说说代码本身的质量（正确性、边界条件、复杂度），不要只按普通问答的标准打分。"
       : ""
   }
 

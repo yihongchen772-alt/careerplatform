@@ -2,14 +2,19 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, Download, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { CalendarDays, CheckCircle2, Plus, Undo2 } from "lucide-react";
 import { zhCN } from "react-day-picker/locale";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PersonalTaskFormDialog } from "@/components/dashboard/personal-task-form-dialog";
+import { AddScheduleDialog, type ScheduleApplication } from "@/components/calendar/add-schedule-dialog";
 import { toDateKey } from "@/lib/dates";
-import { downloadIcs, toIcs } from "@/lib/ics";
+import { absoluteWhen, clock, dayLabel, kindFromText, SCHEDULE_KIND_LABELS } from "@/lib/interview-schedule";
+import { KIND_STYLE } from "@/components/schedule/kind-style";
+import { setEventCompleted, setStepCompleted } from "@/lib/actions/schedule";
+import { cn } from "@/lib/utils";
 
 export type CalendarEvent = {
   id: string;
@@ -18,10 +23,14 @@ export type CalendarEvent = {
    * single-point deadline — same idea as StageHistory.nextDeadlineEnd. */
   dateEnd: string | null;
   label: string;
+  /** Has a clock time (a booked slot), not just a day. */
+  timed?: boolean;
+  /** When a booked slot ends (same day). */
+  until?: string | null;
+  /** Marked 已完成 (your own events and 投递 steps can be). */
+  done?: boolean;
   href: string;
 };
-
-type LinkOption = { id: string; label: string };
 
 // Local calendar day, not UTC — react-day-picker's `selected` is a local-midnight
 // Date, so bucketing by `.toISOString()` (UTC) would shift events by a day for any
@@ -30,15 +39,31 @@ const dayKey = toDateKey;
 
 export function DeadlineCalendar({
   events,
-  positions,
-  applications,
+  scheduleApps,
 }: {
   events: CalendarEvent[];
-  positions: LinkOption[];
-  applications: LinkOption[];
+  scheduleApps: ScheduleApplication[];
 }) {
   const [selected, setSelected] = useState<Date | undefined>(undefined);
   const [now] = useState(() => Date.now());
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  // 「已完成」 / 撤销 for your own events (event-…) and a 投递's steps (stage-…).
+  async function toggleDone(e: CalendarEvent) {
+    const [kind, ...rest] = e.id.split("-");
+    const id = rest.join("-");
+    const done = !e.done;
+    setBusy(e.id);
+    try {
+      const result = kind === "event" ? await setEventCompleted(id, done) : await setStepCompleted(id, done);
+      if (!result.ok) return void toast.error(result.message);
+      toast.success(done ? "已完成" : "已恢复为未完成");
+      router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -79,10 +104,61 @@ export function DeadlineCalendar({
   );
 
   const selectedKey = selected ? dayKey(selected) : null;
-  const shownEvents = selectedKey ? eventsByDay.get(selectedKey) ?? [] : upcoming;
+  const [showDone, setShowDone] = useState(false);
+  // 近期事项: what is still to do, a day at a time like 接下来; what is done folds away.
+  const open = upcoming.filter((e) => !e.done);
+  const done = upcoming.filter((e) => e.done);
+  const shownEvents = selectedKey ? eventsByDay.get(selectedKey) ?? [] : open;
+  const groups: { key: string; label: string; items: CalendarEvent[] }[] = [];
+  for (const e of shownEvents) {
+    const key = dayKey(new Date(e.date));
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.items.push(e);
+    else {
+      const label = dayLabel(key, now);
+      groups.push({ key, label: `${label.day}${label.day.startsWith("周") || ["今天", "明天", "后天", "昨天"].includes(label.day) ? ` · ${label.date}` : ""}`, items: [e] });
+    }
+  }
+
+  function row(e: CalendarEvent) {
+    const canComplete = e.id.startsWith("event-") || e.id.startsWith("stage-");
+    const kind = kindFromText(e.label);
+    return (
+      <li
+        key={e.id}
+        className={cn("flex items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/55 px-3 py-2 text-sm transition-colors hover:bg-muted/60", e.done && "opacity-60")}
+      >
+        <Link href={e.href} className="flex min-w-0 flex-1 items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2">
+            {kind !== "event" && <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold", KIND_STYLE[kind])}>{SCHEDULE_KIND_LABELS[kind]}</span>}
+            <span className={cn("min-w-0 [overflow-wrap:anywhere]", e.done && "line-through")}>{e.label}</span>
+          </span>
+          <span className="shrink-0 pl-2 text-xs tabular-nums text-muted-foreground">
+            {e.dateEnd
+              ? `${new Date(e.date).toLocaleDateString("zh-CN")} - ${new Date(e.dateEnd).toLocaleDateString("zh-CN")}`
+              : `${absoluteWhen(e.date, !!e.timed)}${e.timed && e.until ? `–${clock(new Date(e.until))}` : ""}`}
+          </span>
+        </Link>
+        {canComplete && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground"
+            disabled={busy === e.id}
+            onClick={() => void toggleDone(e)}
+            aria-label={`${e.done ? "撤销完成" : "标为已完成"}：${e.label}`}
+          >
+            {e.done ? <Undo2 className="size-3.5" /> : <CheckCircle2 className="size-3.5" />}
+            {e.done ? "撤销" : "已完成"}
+          </Button>
+        )}
+      </li>
+    );
+  }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
+    <div className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)]">
       <Card className="w-fit">
         <CardContent className="pt-6">
           <Calendar
@@ -93,47 +169,38 @@ export function DeadlineCalendar({
             modifiers={{ hasEvent: eventDates }}
             modifiersClassNames={{
               hasEvent:
-                "relative after:absolute after:bottom-1 after:left-1/2 after:size-1 after:-translate-x-1/2 after:rounded-full after:bg-primary",
+                "has-event relative after:absolute after:bottom-1 after:left-1/2 after:size-1 after:-translate-x-1/2 after:rounded-full after:bg-primary",
             }}
           />
         </CardContent>
       </Card>
 
       <Card>
-        <CardContent className="space-y-2 pt-6">
+        <CardContent className="space-y-3 pt-6">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium">
-              {selected
-                ? selected.toLocaleDateString("zh-CN", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })
-                : "近期事项"}
-            </p>
+            <div>
+              <p className="text-base font-semibold tracking-tight">
+                {selected ? selected.toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" }) : "近期事项"}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {selected ? `${shownEvents.length} 项安排` : `今天起 ${open.length} 项${done.length ? ` · 已完成 ${done.length}` : ""}`}
+              </p>
+            </div>
             <div className="flex shrink-0 gap-1.5">
-              {events.length > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => downloadIcs("求职罗盘-日程.ics", toIcs(events))}
-                >
-                  <Download />
-                  导出到日历
-                </Button>
-              )}
               {selectedKey && (
-                <PersonalTaskFormDialog
-                  positions={positions}
-                  applications={applications}
-                  defaultDueDate={selectedKey}
-                  trigger={
-                    <Button size="sm" variant="outline">
-                      <Plus />
-                      这天加日程
-                    </Button>
-                  }
-                />
+                <>
+                  <Button size="sm" variant="ghost" onClick={() => setSelected(undefined)}>看全部</Button>
+                  <AddScheduleDialog
+                    applications={scheduleApps}
+                    defaultDate={selectedKey}
+                    trigger={
+                      <Button size="sm" variant="outline">
+                        <Plus />
+                        这天加日程
+                      </Button>
+                    }
+                  />
+                </>
               )}
             </div>
           </div>
@@ -141,24 +208,26 @@ export function DeadlineCalendar({
             <div className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
               <CalendarDays className="size-8 text-muted-foreground/50" />
               <span className="text-sm">
-                {selected ? "这天没有安排，点右上角加一个" : "暂无即将到来的截止日期"}
+                {selected ? "这天没有安排，点右上角加一个" : "暂无即将到来的安排"}
               </span>
             </div>
           ) : (
-            shownEvents.map((e) => (
-              <Link
-                key={e.id}
-                href={e.href}
-                className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-muted"
-              >
-                <span>{e.label}</span>
-                <span className="text-xs text-muted-foreground">
-                  {e.dateEnd
-                    ? `${new Date(e.date).toLocaleDateString()} - ${new Date(e.dateEnd).toLocaleDateString()}`
-                    : new Date(e.date).toLocaleDateString()}
-                </span>
-              </Link>
-            ))
+            <div className="space-y-3">
+              {groups.map((group) => (
+                <div key={group.key}>
+                  {!selected && <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground">{group.label}</p>}
+                  <ul className="space-y-1.5">{group.items.map(row)}</ul>
+                </div>
+              ))}
+              {!selected && done.length > 0 && (
+                <div>
+                  <button type="button" className="text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => setShowDone((value) => !value)}>
+                    {showDone ? "收起已完成" : `已完成 ${done.length} 项`}
+                  </button>
+                  {showDone && <ul className="mt-1.5 space-y-1.5">{done.map(row)}</ul>}
+                </div>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

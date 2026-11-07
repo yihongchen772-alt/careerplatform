@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -29,8 +29,8 @@ export function FileUploadButton({
       });
       onUploaded({ url: blob.url, name: file.name });
       toast.success("上传成功");
-    } catch {
-      toast.error("上传失败，请重试");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "上传失败，请重试");
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";

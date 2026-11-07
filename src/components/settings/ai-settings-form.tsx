@@ -12,7 +12,9 @@ import { ConfirmDeleteButton } from "@/components/ui/confirm-delete-button";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -20,6 +22,7 @@ import {
   upsertAiKey,
   deleteAiKey,
   setDefaultAiProvider,
+  switchAiModel,
   type AiKeyOverview,
 } from "@/lib/actions/ai-keys";
 import { listProviderModels } from "@/lib/actions/ai-models";
@@ -40,25 +43,28 @@ export function AiSettingsForm({ keys }: { keys: AiKeyOverview[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>AI 设置 · API 管理</CardTitle>
+        <CardTitle className="text-base font-semibold">AI 模型与 Key</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          {hasAnyKey
-            ? "可以同时配置多个服务商的 Key，切换默认服务商供面试攻略、模拟面试等文字类功能使用。"
-            : "AI 功能都需要你自己的 API Key 才能用，没有共享额度。"}
-          有两类功能会挑服务商：<span className="font-medium">读文件</span>
-          （简历体检、岗位匹配）只能用 Gemini/Claude/OpenAI；
-          <span className="font-medium">联网搜索</span>
-          （岗位口碑调研）可以用 Qwen/Gemini/Claude/OpenAI。都会优先用你的默认服务商，
-          不支持时自动换成你配了的、支持的那个。搜索优先挑 Qwen——Gemini 免费版的联网搜索额度
-          极少，很快就会用完。
+          {hasAnyKey ? "可以同时配置多家，在上面选一个正在用的。" : "本地单机版没有共享额度，AI 功能需要你自己的 API Key。"}
         </p>
+        <details className="text-sm text-muted-foreground">
+          <summary className="cursor-pointer text-xs hover:text-foreground">哪些功能用哪家？</summary>
+          <p className="mt-2 leading-6">
+            <span className="font-medium text-foreground">读文件</span>（简历体检、岗位匹配、截图导入）：图片各家都能读；PDF 只有 Gemini / Claude / OpenAI / Qwen 能读。
+            <span className="font-medium text-foreground">联网搜索</span>（AI 搜公司、岗位口碑）：Qwen / Gemini / Claude / OpenAI，优先用 Qwen，Gemini 免费版的联网额度很少。
+            都会先用正在用的那家，不支持时自动换成你配了且支持的。
+          </p>
+        </details>
+
+        {hasAnyKey && <ModelSwitcher keys={keys} />}
 
         <div className="space-y-2">
           {keys.map((k) => (
             <ProviderRow
-              key={k.provider}
+              // Remount after a switch above so the row shows the new model order.
+              key={`${k.provider}:${k.model ?? ""}`}
               entry={k}
               editing={editing === k.provider}
               onEdit={() => setEditing(k.provider)}
@@ -69,6 +75,88 @@ export function AiSettingsForm({ keys }: { keys: AiKeyOverview[] }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+const splitModels = (value: string | null) => (value ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+
+/**
+ * Every model of every configured provider in one list: picking one makes it
+ * the one in use straight away, no 编辑 → 保存 round trip.
+ */
+function ModelSwitcher({ keys }: { keys: AiKeyOverview[] }) {
+  const configured = keys.filter((k) => k.configured);
+  const current = configured.find((k) => k.isDefault);
+  const currentModel = current ? splitModels(current.model)[0] ?? AI_PROVIDER_OPTIONS.find((p) => p.id === current.provider)!.defaultModel : "";
+  const [fetched, setFetched] = useState<Partial<Record<AiProviderId, string[]>>>({});
+  const [busy, setBusy] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const value = current ? `${current.provider}::${currentModel}` : "";
+
+  const options = configured.map((k) => {
+    const meta = AI_PROVIDER_OPTIONS.find((p) => p.id === k.provider)!;
+    const models = Array.from(new Set([...splitModels(k.model), ...(fetched[k.provider] ?? SEED_MODELS[k.provider])]));
+    return { provider: k.provider, label: k.label, models: models.length ? models : [meta.defaultModel] };
+  });
+
+  async function choose(next: string | null) {
+    if (!next || next === value || busy) return;
+    const [provider, model] = next.split("::") as [AiProviderId, string];
+    setBusy(true);
+    try {
+      const res = await switchAiModel(provider, model);
+      if (!res.ok) return void toast.error(res.message);
+      toast.success(`已改用 ${AI_PROVIDER_OPTIONS.find((p) => p.id === provider)!.label} · ${model}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fetchAll() {
+    setFetching(true);
+    try {
+      const results = await Promise.all(configured.map(async (k) => [k.provider, await listProviderModels({ provider: k.provider })] as const));
+      const next: Partial<Record<AiProviderId, string[]>> = {};
+      const failed: string[] = [];
+      for (const [provider, res] of results) {
+        if (res.ok) next[provider] = res.data.models;
+        else failed.push(`${AI_PROVIDER_OPTIONS.find((p) => p.id === provider)!.label}：${res.message}`);
+      }
+      setFetched((prev) => ({ ...prev, ...next }));
+      if (failed.length) toast.error(`有的没拉到：${failed.join("；")}`);
+      else toast.success("已拉到每个服务商当前可用的全部模型");
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  return (
+    <div className="space-y-1.5 rounded-md border bg-muted/30 p-3">
+      <Label className="text-xs text-muted-foreground">正在使用的模型（小欧和各项 AI 功能默认用它，选了立即生效）</Label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={value} onValueChange={choose} disabled={busy}>
+          <SelectTrigger className="min-w-64 flex-1">
+            <SelectValue>{() => current ? `${current.label} · ${currentModel}` : "选一个模型"}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((group) => (
+              <SelectGroup key={group.provider}>
+                <SelectLabel>{group.label}</SelectLabel>
+                {group.models.map((model) => (
+                  <SelectItem key={model} value={`${group.provider}::${model}`}>{model}</SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button type="button" variant="outline" size="sm" disabled={fetching} onClick={fetchAll}>
+          {fetching ? "获取中..." : "获取全部可用模型"}
+        </Button>
+      </div>
+      {current?.provider === "gemini" && splitModels(current.model).length > 1 && (
+        <p className="text-xs text-muted-foreground">Gemini 额度用完或过载时，会依次换用你勾选的其他模型：{splitModels(current.model).slice(1).join("、")}。</p>
+      )}
+    </div>
   );
 }
 
@@ -97,18 +185,20 @@ function ProviderRow({
   );
   const [fetchingModels, setFetchingModels] = useState(false);
 
-  // Gemini can rotate through several models on a 429 (per-model free
-  // quota), so it gets checkboxes; every other provider takes exactly one
-  // model name.
+  // Gemini can rotate through several models on a 429 (per-model free quota),
+  // so it gets checkboxes; every other provider takes exactly one model name.
   const [checked, setChecked] = useState<Set<string>>(() => new Set(savedModels));
   const [customModel, setCustomModel] = useState("");
   const initialSingle = savedModels[0] ?? "";
   const [model, setModel] = useState(initialSingle);
-  const [singleChoice, setSingleChoice] = useState(
-    initialSingle && !SEED_MODELS[entry.provider].includes(initialSingle)
-      ? initialSingle
-      : initialSingle || meta.defaultModel
-  );
+  const [singleChoice, setSingleChoice] = useState(() => {
+    if (initialSingle) return initialSingle;
+    // No seed list to pick a default from (e.g. Doubao, where the "model" is
+    // actually a per-account 推理接入点 ID — there's no universal default to
+    // pre-fill) — go straight to the free-text field instead of silently
+    // pre-selecting a placeholder-looking string that isn't a real model.
+    return SEED_MODELS[entry.provider].length > 0 ? meta.defaultModel : CUSTOM;
+  });
   const [baseUrl, setBaseUrl] = useState(entry.baseUrl ?? "");
   const [loading, setLoading] = useState(false);
   const [settingDefault, setSettingDefault] = useState(false);
@@ -144,7 +234,7 @@ function ProviderRow({
   }
 
   async function handleSave() {
-    if (!apiKey) {
+    if (!apiKey && !entry.configured) {
       toast.error("请填写 API Key");
       return;
     }
@@ -157,11 +247,18 @@ function ProviderRow({
         : singleChoice === CUSTOM
           ? model.trim()
           : singleChoice;
+    if (entry.provider === "doubao" && !finalModel) {
+      // Unlike every other provider, there's no universal default model to
+      // silently fall back to here — falling back would send the literal
+      // placeholder example string as the "model" param to a real API call.
+      toast.error("豆包没有通用默认模型，请填你自己的推理接入点 ID");
+      return;
+    }
     setLoading(true);
     try {
       await upsertAiKey({
         provider: entry.provider,
-        apiKey,
+        apiKey: apiKey || undefined,
         model: finalModel || undefined,
         baseUrl: isOpenAiCompatible ? baseUrl || undefined : undefined,
       });
@@ -253,16 +350,17 @@ function ProviderRow({
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder={entry.configured ? "已设置，重新填写以更新" : ""}
+              placeholder={entry.configured ? "已设置，留空则保持不变，只改下面的模型也可以直接保存" : ""}
             />
           </div>
-
           <div className="space-y-1">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Label className="text-xs text-muted-foreground">
                 {entry.provider === "gemini"
                   ? "模型（可多选，按顺序尝试；只勾一个就是固定用那个）"
-                  : `模型（默认 ${meta.defaultModel}）`}
+                  : entry.provider === "doubao"
+                    ? "推理接入点 ID（没有通用默认值，必须填你自己账号下的接入点）"
+                    : `模型（默认 ${meta.defaultModel}）`}
               </Label>
               <Button
                 type="button"
@@ -276,8 +374,9 @@ function ProviderRow({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              下面是常见的几个。点「获取模型列表」会拿你这个 Key
-              实际能调的全部模型——各家上新模型比写死的列表快，以拉回来的为准。
+              {entry.provider === "doubao"
+                ? "接入点是每个账号私有的，没有通用列表可选——直接在下面填你自己创建的接入点 ID。"
+                : "下面是常见的几个。点「获取模型列表」会拿你这个 Key 实际能调的全部模型——各家上新模型比写死的列表快，以拉回来的为准。"}
             </p>
 
             {entry.provider === "gemini" ? (

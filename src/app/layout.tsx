@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "秋招追踪",
+  title: "求职罗盘",
   description: "投递记录、面试进展与岗位匹配管理",
   manifest: "/manifest.json",
   icons: {
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "秋招追踪",
+    title: "求职罗盘",
   },
 };
 
@@ -48,10 +48,12 @@ const NO_FLASH_THEME_SCRIPT = `
   try {
     var mode = localStorage.getItem("careerplatform:theme-mode") || "system";
     var palette = localStorage.getItem("careerplatform:theme-palette") || "indigo";
+    var style = localStorage.getItem("careerplatform:theme-style") || "soft";
     var isDark = mode === "dark" || (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     var root = document.documentElement;
     if (isDark) root.classList.add("dark");
     root.setAttribute("data-palette", palette);
+    root.setAttribute("data-style", style);
   } catch (e) {}
 })();
 `;

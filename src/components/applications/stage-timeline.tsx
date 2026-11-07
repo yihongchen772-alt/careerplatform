@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { CalendarClock, Mail, Pencil, Radar } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,20 +17,51 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AttachmentList } from "@/components/applications/attachment-list";
-import { STAGE_BADGE_VARIANT, STAGE_LABELS, STAGE_ORDER } from "@/lib/stage-labels";
+import { STAGE_LABELS, STAGE_ORDER } from "@/lib/stage-labels";
+import { applicationStageStyle } from "@/lib/application-stage-style";
+import { cn } from "@/lib/utils";
 import { updateStageHistory, deleteStageHistory } from "@/lib/actions/applications";
+import { ScheduleFields, scheduleDraftFrom, scheduleFromDraft, type ScheduleDraft } from "@/components/schedule/schedule-fields";
+import { MeetingActions } from "@/components/schedule/meeting-actions";
+import { absoluteWhen, clock, meetingSummary } from "@/lib/interview-schedule";
+import {
+  generateStagePostmortem,
+  type StagePostmortem,
+} from "@/lib/actions/stage-postmortem";
 import type { ApplicationStage } from "@prisma/client";
 
 export type TimelineEntry = {
   id: string;
   stage: ApplicationStage;
+  stageLabel: string | null;
+  terminatedAtStage?: string | null;
+  terminatedAtStageLabel?: string | null;
   enteredAt: string;
   note: string | null;
   interviewFormat: string | null;
   interviewer: string | null;
   nextDeadline: string | null;
+  nextDeadlineEnd: string | null;
+  nextHasTime?: boolean;
+  meetingInfo?: string | null;
+  remindMinutes?: number | null;
+  /** "email" when the time was written from a recognised invitation. */
+  scheduleSource?: string | null;
   attachments: { id: string; url: string; name: string }[];
+  postmortem: StagePostmortem | null;
 };
+
+/** 「10/15（周三）14:00–15:00」 or 「截止 10/21」 / 「窗口 10/21 – 10/23」. */
+function scheduleText(entry: TimelineEntry): string {
+  if (!entry.nextDeadline) return "";
+  if (entry.nextHasTime) {
+    const end = entry.nextDeadlineEnd ? new Date(entry.nextDeadlineEnd) : null;
+    return `${absoluteWhen(entry.nextDeadline)}${end ? `–${clock(end)}` : ""}`;
+  }
+  return entry.nextDeadlineEnd && entry.nextDeadlineEnd.slice(0, 10) !== entry.nextDeadline.slice(0, 10)
+    ? `窗口 ${absoluteWhen(entry.nextDeadline, false)} – ${absoluteWhen(entry.nextDeadlineEnd, false)}`
+    : `截止 ${absoluteWhen(entry.nextDeadline, false)}`;
+}
 
 /** Date -> the value a <input type="datetime-local"> expects (local time). */
 function toLocalInput(iso: string): string {
@@ -47,7 +78,7 @@ export function StageTimeline({
   canDelete: boolean;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="relative space-y-3 before:absolute before:bottom-5 before:left-[0.43rem] before:top-5 before:w-px before:bg-border">
       {entries.map((entry) => (
         <TimelineRow key={entry.id} entry={entry} canDelete={canDelete} />
       ))}
@@ -64,21 +95,62 @@ function TimelineRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [stage, setStage] = useState<ApplicationStage>(entry.stage);
+  const [stageLabel, setStageLabel] = useState(entry.stageLabel ?? "");
+  const [endedStage, setEndedStage] = useState(entry.terminatedAtStage ?? "");
   const [enteredAt, setEnteredAt] = useState(toLocalInput(entry.enteredAt));
   const [note, setNote] = useState(entry.note ?? "");
   const [format, setFormat] = useState(entry.interviewFormat ?? "");
   const [interviewer, setInterviewer] = useState(entry.interviewer ?? "");
+  const [schedule, setSchedule] = useState<ScheduleDraft>(() => scheduleDraftFrom(entry));
   const [saving, setSaving] = useState(false);
+  const [postmortem, setPostmortem] = useState(entry.postmortem);
+  const [postmortemLoading, setPostmortemLoading] = useState(false);
+
+  // Start from the row as it is now: the time may have been changed from the
+  // 面试与准备 card (or an email) since this row first rendered.
+  function startEdit() {
+    setStage(entry.stage);
+    setStageLabel(entry.stageLabel ?? "");
+    setEndedStage(entry.terminatedAtStage ?? "");
+    setEnteredAt(toLocalInput(entry.enteredAt));
+    setNote(entry.note ?? "");
+    setFormat(entry.interviewFormat ?? "");
+    setInterviewer(entry.interviewer ?? "");
+    setSchedule(scheduleDraftFrom(entry));
+    setEditing(true);
+  }
+
+  async function handlePostmortem() {
+    setPostmortemLoading(true);
+    try {
+      const res = await generateStagePostmortem(entry.id);
+      if (res.ok) setPostmortem(res.data);
+      else toast.error(res.message);
+    } finally {
+      setPostmortemLoading(false);
+    }
+  }
 
   async function handleSave() {
+    const planned = scheduleFromDraft(schedule);
+    if ("error" in planned) {
+      toast.error(planned.error);
+      return;
+    }
     setSaving(true);
     try {
       const res = await updateStageHistory(entry.id, {
         stage,
+        stageLabel,
+        terminatedAtStage: (endedStage || null) as ApplicationStage | null,
         note: note || undefined,
         interviewFormat: format || undefined,
         interviewer: interviewer || undefined,
-        nextDeadline: entry.nextDeadline ? new Date(entry.nextDeadline) : null,
+        nextDeadline: planned.value.nextDeadline,
+        nextDeadlineEnd: planned.value.nextDeadlineEnd,
+        nextHasTime: planned.value.nextHasTime,
+        meetingInfo: planned.value.meetingInfo,
+        remindMinutes: planned.value.remindMinutes,
         enteredAt,
       });
       if (!res.ok) {
@@ -94,7 +166,7 @@ function TimelineRow({
 
   if (editing) {
     return (
-      <div className="space-y-2 rounded-md border p-3">
+      <div className="space-y-3 rounded-2xl border border-border/70 bg-background/55 p-4">
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">阶段</Label>
@@ -122,6 +194,11 @@ function TimelineRow({
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">企业阶段名称（可选）</Label>
+            <Input value={stageLabel} maxLength={100} onChange={(e) => setStageLabel(e.target.value)} placeholder="例如：群面 / 技术终面" />
+            {["REJECTED", "WITHDRAWN", "CANCELLED"].includes(stage) && <select aria-label="终止阶段" value={endedStage} onChange={(e) => setEndedStage(e.target.value)} className="w-full border bg-background p-2"><option value="">未记录</option>{Object.entries(STAGE_LABELS).filter(([key]) => !["REJECTED", "WITHDRAWN", "CANCELLED", "ACCEPTED", "DECLINED"].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>}
+          </div>
+          <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">面试形式</Label>
             <Input value={format} onChange={(e) => setFormat(e.target.value)} />
           </div>
@@ -129,6 +206,10 @@ function TimelineRow({
             <Label className="text-xs text-muted-foreground">面试官</Label>
             <Input value={interviewer} onChange={(e) => setInterviewer(e.target.value)} />
           </div>
+        </div>
+        <div className="space-y-1.5 rounded-xl border border-border/60 bg-background/40 p-3">
+          <p className="text-xs font-medium">时间安排 <span className="font-normal text-muted-foreground">（面试时间 / 笔试截止）</span></p>
+          <ScheduleFields value={schedule} onChange={setSchedule} idPrefix={`timeline-${entry.id}`} excludeRowId={entry.id} />
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">复盘 / 备注</Label>
@@ -162,20 +243,32 @@ function TimelineRow({
   }
 
   return (
-    <div className="group border-l-2 pl-3">
-      <div className="flex items-center gap-2">
-        <Badge variant={STAGE_BADGE_VARIANT[entry.stage]}>
+    <div className="group relative ml-7 rounded-2xl border border-border/65 bg-background/50 p-3.5 shadow-[0_4px_16px_-12px_rgba(0,0,0,0.3)]">
+      <span className={cn("absolute -left-[1.92rem] top-5 size-3 rounded-full ring-4 ring-card", applicationStageStyle(entry.stage).dot)} />
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge className={cn("h-6 border-0 px-2.5", applicationStageStyle(entry.stage).pill)}>
           {STAGE_LABELS[entry.stage]}
         </Badge>
+        {entry.stageLabel && <span className="text-xs font-medium">{entry.stageLabel}</span>}
+        {["REJECTED", "WITHDRAWN", "CANCELLED"].includes(entry.stage) && <span className="text-xs text-muted-foreground">结束于：{entry.terminatedAtStageLabel || STAGE_LABELS[entry.terminatedAtStage as ApplicationStage] || "未记录"}</span>}
         <span className="text-xs text-muted-foreground">
-          {new Date(entry.enteredAt).toLocaleString()}
+          {/* A day entered without a clock time is stored at UTC midnight: no made-up 08:00. */}
+          {new Date(entry.enteredAt).getTime() % 86_400_000 === 0
+            ? new Date(entry.enteredAt).toLocaleDateString("zh-CN", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit" })
+            : new Date(entry.enteredAt).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
         </span>
+        {entry.note?.startsWith("网申进度同步：") && (
+          <Badge variant="outline" className="gap-1 text-xs font-normal text-muted-foreground" title="这一步是 App 从公司官网「我的投递」页自动读出来推进的，不是你手动填的">
+            <Radar className="size-3" />
+            官网同步
+          </Badge>
+        )}
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="ml-auto h-6 px-1.5 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-          onClick={() => setEditing(true)}
+          className="ml-auto h-6 px-1.5 text-xs opacity-70 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          onClick={startEdit}
         >
           <Pencil className="mr-1 size-3" />
           改
@@ -187,10 +280,66 @@ function TimelineRow({
         </p>
       )}
       {entry.note && <p className="mt-1 text-sm">{entry.note}</p>}
-      {entry.nextDeadline && (
-        <p className="mt-1 text-xs text-muted-foreground">
-          下一步截止：{new Date(entry.nextDeadline).toLocaleDateString()}
-        </p>
+      {entry.note && (
+        <div className="mt-1.5">
+          {!postmortem ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-xs"
+              disabled={postmortemLoading}
+              onClick={handlePostmortem}
+            >
+              {postmortemLoading ? "复盘中..." : "AI 复盘这场面试"}
+            </Button>
+          ) : (
+            <div className="space-y-1.5 rounded-xl bg-muted/55 p-3 text-xs">
+              {postmortem.reflectionQuestions.length > 0 && (
+                <div>
+                  <p className="font-medium text-muted-foreground">值得想清楚的问题</p>
+                  <ul className="list-inside list-disc">
+                    {postmortem.reflectionQuestions.map((q, i) => (
+                      <li key={i}>{q}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {postmortem.improvements.length > 0 && (
+                <div>
+                  <p className="font-medium text-muted-foreground">下次可以怎么改</p>
+                  <ul className="list-inside list-disc">
+                    {postmortem.improvements.map((imp, i) => (
+                      <li key={i}>{imp}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-xs"
+                disabled={postmortemLoading}
+                onClick={handlePostmortem}
+              >
+                {postmortemLoading ? "重新生成中..." : "重新生成"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+      {(entry.nextDeadline || entry.meetingInfo) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl bg-muted/45 px-2.5 py-2 text-xs">
+          {entry.nextDeadline && (
+            <span className="inline-flex items-center gap-1 font-medium">
+              <CalendarClock className="size-3.5 text-primary" />
+              {scheduleText(entry)}
+            </span>
+          )}
+          {entry.scheduleSource === "email" && <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground" title="时间是从邮件里自动识别写入的"><Mail className="size-3" />邮件识别</span>}
+          {entry.nextHasTime && entry.remindMinutes !== null && entry.remindMinutes !== undefined && <span className="text-[11px] text-muted-foreground">· 已进日历并提醒</span>}
+          {entry.meetingInfo && <span className="min-w-0 basis-full truncate text-muted-foreground" title={entry.meetingInfo}>{meetingSummary(entry.meetingInfo, entry.stage === "ASSESSMENT" || entry.stage === "OA" || entry.stage === "AI_INTERVIEW")}</span>}
+          {entry.meetingInfo && <MeetingActions info={entry.meetingInfo} size="xs" exam={entry.stage === "ASSESSMENT" || entry.stage === "OA" || entry.stage === "AI_INTERVIEW"} />}
+        </div>
       )}
       {entry.attachments.length > 0 && (
         <div className="mt-2">

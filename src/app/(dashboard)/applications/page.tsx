@@ -1,44 +1,148 @@
 import { db } from "@/lib/db";
+import Link from "next/link";
 import { requireUser } from "@/lib/session";
+import { getAppSettings } from "@/lib/actions/app-settings";
 import { AddApplicationDialog } from "@/components/applications/add-application-dialog";
+import { ImportApplicationsDialog } from "@/components/applications/import-applications-dialog";
 import { ApplicationsView } from "@/components/applications/applications-view";
+import { AutoProgressBanner } from "@/components/applications/auto-progress-banner";
+import { CompanyNameBanner } from "@/components/applications/company-name-banner";
+import { tidyCompanyName } from "@/lib/application-identity";
+import { ScanHealthBanner } from "@/components/applications/scan-health-banner";
+import { getScanHealth } from "@/lib/scan-health";
+import { loadAutoProgressItems, loadAutoScheduleItems } from "@/lib/auto-progress";
+import { JustFinishedStrip } from "@/components/schedule/just-finished";
+import { loadJustFinished } from "@/lib/schedule-loader";
+import { applicationScheduleItems, currentStageRow, isTerminalStage, nextScheduleItem, stepView } from "@/lib/interview-schedule";
+import { applicationCities } from "@/lib/application-city";
+import { industryLabel } from "@/lib/company-industry";
+import { currentTimeMs } from "@/lib/dates";
+import { PageHero } from "@/components/layout/page-hero";
+import { FunnelCard } from "@/components/insights/funnel-card";
+import { computeFunnel, computeOutcomes } from "@/lib/funnel";
+import { furthestInterview } from "@/lib/application-filters";
+import { Send } from "lucide-react";
 
 export default async function ApplicationsPage() {
   const user = await requireUser();
+  const scanHealth = await getScanHealth(user.id);
 
-  const [applications, resumeVersions] = await Promise.all([
+  const now = currentTimeMs();
+  const [applications, resumeVersions, portals, settings, autoUpdates, autoSchedules, justFinished] = await Promise.all([
     db.application.findMany({
       where: { userId: user.id },
-      include: { company: true },
+      include: {
+        // Aliases too, so the search finds 字节跳动 by "ByteDance" or "头条".
+        company: { include: { aliases: { select: { alias: true } } } },
+        // Where the job is, for grouping and filtering by city.
+        position: { select: { location: true } },
+        // Only the entry matching the application's current stage is still
+        // relevant to "what's next" — earlier stages' deadlines are history.
+        // Deliberately NOT `orderBy: enteredAt desc, take: 1`: the very
+        // first history row (APPLIED) stores enteredAt as a date-only value
+        // parsed at UTC midnight, while every later row stores the real
+        // instant of the update — for a same-day application from UTC+8,
+        // that date-only midnight can sort *after* a same-day real
+        // timestamp, so "latest by enteredAt" can silently pick the wrong
+        // row. Matching on stage directly sidesteps the comparison.
+        stageHistory: {
+          select: { id: true, stage: true, stageLabel: true, enteredAt: true, nextDeadline: true, nextDeadlineEnd: true, nextHasTime: true, meetingInfo: true, remindMinutes: true, interviewFormat: true, completedAt: true, followedUpAt: true, terminatedAtStage: true, terminatedAtStageLabel: true },
+        },
+      },
       orderBy: { appliedDate: "desc" },
     }),
     db.resumeVersion.findMany({
       where: { userId: user.id },
       select: { id: true, name: true, isDefault: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
     }),
+    db.applicationPortal.findMany({
+      select: { id: true, companyId: true, label: true, lastCheckedAt: true, lastSuccessfulAt: true, lastError: true, company: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    getAppSettings(),
+    loadAutoProgressItems(user.id),
+    loadAutoScheduleItems(user.id),
+    loadJustFinished(user.id, new Date(now)),
   ]);
+  const untidyNames = [...new Set(applications.map((app) => app.company.name))].flatMap((from) => {
+    const to = tidyCompanyName(from);
+    return to ? [{ from, to }] : [];
+  });
+
+  const portalCompanies = new Set(portals.map((portal) => portal.companyId));
+  const unassigned = applications.filter((app) => !app.portalId && !["REJECTED", "ACCEPTED", "DECLINED", "WITHDRAWN", "CANCELLED"].includes(app.currentStage) && portalCompanies.has(app.companyId));
+  const autoSyncEnabled = settings.backgroundReminders && (settings.applicationSyncIntervalHours ?? 0) > 0;
+
+  // The 总览's 阶段覆盖, shown again in the 投递情况总表.
+  const funnelApps = applications.map((app) => ({ currentStage: app.currentStage, stageHistory: app.stageHistory.map((row) => ({ stage: row.stage })) }));
+  const funnel = <FunnelCard levels={computeFunnel(funnelApps).levels} total={applications.length} outcomes={computeOutcomes(funnelApps)} />;
+
+  // 投递 with no city from any source: how many the lookup hasn't tried yet.
+  const cityless = applications.filter((app) => !applicationCities({ city: app.city, location: app.position?.location, title: app.title, companyName: app.company.name }).length);
+  const guessedCities = applications.filter((app) => app.city !== null && app.citySource === "公司所在地").length;
+  const cityLookup = { missing: cityless.length, pending: cityless.filter((app) => !app.cityLookupAt).length, guessed: guessedCities };
 
   const defaultResumeVersionId =
     resumeVersions.find((r) => r.isDefault)?.id ?? null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold">投递记录</h1>
-        <AddApplicationDialog
-          resumeVersions={resumeVersions}
-          defaultResumeVersionId={defaultResumeVersionId}
-        />
-      </div>
+    <div className="mx-auto max-w-[110rem] space-y-7">
+      <PageHero
+        title="投递记录"
+        icon={Send}
+        description="从发出申请到收到 Offer，每一次进展都在这里。"
+        actions={<><ImportApplicationsDialog /><AddApplicationDialog resumeVersions={resumeVersions} defaultResumeVersionId={defaultResumeVersionId} /></>}
+      />
+
+      {scanHealth.failing && <ScanHealthBanner error={scanHealth.error} since={scanHealth.since?.toISOString() ?? null} lastOkAt={scanHealth.lastOkAt?.toISOString() ?? null} />}
+      <AutoProgressBanner items={autoUpdates} schedules={autoSchedules} />
+      <CompanyNameBanner pairs={untidyNames} />
+
+      <JustFinishedStrip items={justFinished} now={now} />
+
+      {/* 接下来 lives on 总览 and 日历; here the list itself comes first. */}
 
       <ApplicationsView
-        applications={applications.map((a) => ({
-          ...a,
-          appliedDate: a.appliedDate.toISOString(),
-          currentStageDate: a.currentStageDate.toISOString(),
-        }))}
+        now={now}
+        funnel={funnel}
+        cityLookup={cityLookup}
+        applications={applications.map(({ stageHistory, position, ...a }) => {
+          // The step's time or deadline that matters now: live, else the
+          // next one ahead, else the current step's (past) one.
+          const nextSchedule = nextScheduleItem(applicationScheduleItems({ id: a.id, title: a.title, companyName: a.company.name, currentStage: a.currentStage, currentStageDate: a.currentStageDate }, stageHistory, now), now);
+          // Where a closed application ended (「结束于：一面」).
+          const current = currentStageRow(a, stageHistory);
+          // 等结果 / 截止已过 for the current round.
+          const step = current && !isTerminalStage(a.currentStage) ? stepView(current, now) : null;
+          return {
+            ...a,
+            cities: applicationCities({ city: a.city, location: position?.location, title: a.title, companyName: a.company.name }),
+            industry: industryLabel(a.company),
+            appliedDate: a.appliedDate.toISOString(),
+            currentStageDate: a.currentStageDate.toISOString(),
+            terminatedAtStage: current?.terminatedAtStage ?? null,
+            terminatedAtStageLabel: current?.terminatedAtStageLabel ?? null,
+            nextSchedule,
+            step,
+            waiting: step?.phase === "waiting",
+            interviewReach: furthestInterview(a.currentStage, stageHistory),
+          };
+        })}
       />
+
+      {portals.length > 0 && <section className="surface-card rounded-xl p-4 text-xs sm:p-5" aria-label="官网进度同步状态">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="text-sm font-semibold">官网进度同步</h2><p className="mt-1 text-muted-foreground">{autoSyncEnabled ? `自动检查：每 ${settings.applicationSyncIntervalHours} 小时（设置变更 1 秒内生效）` : "自动检查未开启，可点上方按钮手动同步"}</p></div>
+          <Link href="/settings?tab=mail" className="font-medium text-primary hover:underline">同步设置</Link>
+        </div>
+        {unassigned.length > 0 && <p className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-2.5 text-amber-700 dark:text-amber-300">{unassigned.length} 条投递尚未指定进度页，不会自动同步：{unassigned.slice(0, 3).map((app, index) => <span key={app.id}>{index > 0 ? "、" : ""}<Link href={`/applications/${app.id}`} className="underline underline-offset-2">{app.company.name} · {app.title}</Link></span>)}{unassigned.length > 3 ? "等" : ""}</p>}
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{portals.map((portal) => <div key={portal.id} className="rounded-xl border border-border/55 bg-background/45 px-3 py-2.5">
+          <p className="font-medium">{portal.company.name}{portal.label ? ` · ${portal.label}` : ""}</p>
+          <p className="mt-1 text-muted-foreground">{portal.lastSuccessfulAt ? `上次成功：${portal.lastSuccessfulAt.toLocaleString("zh-CN")}` : "尚无成功同步记录"}</p>
+          {portal.lastError && <p className="mt-1 text-destructive">上次失败：{portal.lastError}</p>}
+        </div>)}</div>
+      </section>}
     </div>
   );
 }

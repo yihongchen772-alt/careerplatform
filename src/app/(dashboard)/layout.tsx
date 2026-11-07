@@ -2,6 +2,14 @@ import { requireUser } from "@/lib/session";
 import { DashboardNav } from "@/components/dashboard/nav";
 import { AssistantWidget } from "@/components/assistant/assistant-widget";
 
+// Prisma reads aren't a Next.js "dynamic API", so without this every page in
+// here would get prerendered once at `next build` time and served as frozen
+// HTML from whatever the build machine's database happened to contain —
+// wrong when every page shows live personal data. `revalidatePath()` calls after mutations happen to paper over this
+// during a single running session, but a fresh install/update would show
+// build-time data until the first action touches each page.
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -24,14 +32,14 @@ export default async function DashboardLayout({
           underneath. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+        className="pointer-events-none fixed inset-0 z-0 overflow-hidden print:hidden"
       >
         <div
-          className="absolute -top-40 right-[-8rem] size-[36rem] rounded-full opacity-30 blur-[90px] dark:opacity-40"
+          className="ambient-glow absolute -top-40 right-[-8rem] size-[36rem] rounded-full blur-[90px]"
           style={{ background: "var(--glow-1)" }}
         />
         <div
-          className="absolute top-1/3 -left-40 size-[32rem] rounded-full opacity-20 blur-[100px] dark:opacity-30"
+          className="ambient-glow-soft absolute top-1/3 -left-40 size-[32rem] rounded-full blur-[100px]"
           style={{ background: "var(--glow-2)" }}
         />
       </div>
@@ -49,10 +57,11 @@ export default async function DashboardLayout({
         the nav, above nothing) and would paint over page content on some
         browsers' stacking-context resolution.
       */}
-      <main className="relative z-10 min-w-0 flex-1 px-4 pb-16 pt-[calc(3.5rem+env(safe-area-inset-top)+1rem)] md:p-6 md:pb-16">
-        {children}
+      <main className="relative z-10 min-w-0 flex-1 px-4 pb-28 pt-[calc(3.5rem+env(safe-area-inset-top)+1rem)] md:px-10 md:pb-28 md:pt-8">
+        {/* One width for every page (settings keeps its narrower form column). */}
+        <div className="mx-auto w-full max-w-[110rem]">{children}</div>
       </main>
-      <AssistantWidget />
+      <div className="print:hidden"><AssistantWidget /></div>
     </div>
   );
 }

@@ -1,15 +1,26 @@
 import type { ApplicationStage } from "@prisma/client";
 
 /**
- * The pipeline, in order. Deliberately excludes REJECTED / ACCEPTED / DECLINED:
- * those are outcomes, not funnel levels — mixing them in breaks the
- * monotonically-narrowing property a funnel is supposed to have.
+ * Owned here, not in analytics.ts — analytics.ts imports FUNNEL_STAGES/
+ * reachedStage from this file, so this file must not import anything back
+ * from analytics.ts (a circular import between the two previously caused a
+ * real "Cannot access 'FUNNEL_STAGES' before initialization" crash,
+ * depending on which page's module graph happened to evaluate first).
+ * analytics.ts re-exports this constant so existing `from "@/lib/analytics"`
+ * imports elsewhere keep working unchanged.
+ */
+export const SMALL_SAMPLE_THRESHOLD = 5;
+
+/**
+ * Display order only. Company workflows can skip or reorder these steps;
+ * never infer that reaching a later display row means completing earlier ones.
  */
 export const FUNNEL_STAGES: ApplicationStage[] = [
   "APPLIED",
   "SCREENING",
   "ASSESSMENT",
   "OA",
+  "AI_INTERVIEW",
   "INTERVIEW_1",
   "INTERVIEW_2",
   "INTERVIEW_3",
@@ -23,8 +34,9 @@ export type FunnelLevel = {
   count: number;
   /** Share of all applications, used for bar width. */
   shareOfTotal: number;
-  /** Conversion from the previous level; null for the first level. */
+  /** Kept for existing callers; no per-step conversion without one shared order. */
   stepRate: number | null;
+  smallSample: boolean;
 };
 
 export type FunnelOutcomes = {
@@ -34,20 +46,17 @@ export type FunnelOutcomes = {
   declined: number;
 };
 
-type FunnelApplication = {
+export type FunnelApplication = {
   stageHistory: { stage: ApplicationStage }[];
 };
 
 /**
- * "Reached" means this stage or any later pipeline stage appears in the
- * history. Counting `currentStage === stage` instead would report 已投递 = 0
- * for someone already at 二面, which is nonsense for a funnel.
+ * "Reached" means the stage was actually recorded in history. Do not credit
+ * skipped company-specific steps based on an assumed global order.
  */
-function reachedStage(app: FunnelApplication, stageIndex: number): boolean {
-  return app.stageHistory.some((h) => {
-    const idx = FUNNEL_STAGES.indexOf(h.stage);
-    return idx >= stageIndex; // -1 (an outcome stage) never satisfies this
-  });
+export function reachedStage(app: FunnelApplication, stageIndex: number): boolean {
+  const stage = FUNNEL_STAGES[stageIndex];
+  return !!stage && app.stageHistory.some((h) => h.stage === stage);
 }
 
 export function computeFunnel(apps: FunnelApplication[]): {
@@ -56,10 +65,8 @@ export function computeFunnel(apps: FunnelApplication[]): {
 } {
   const total = apps.length;
 
-  // Only render stages this user's pipeline actually used. Plenty of companies
-  // skip the written test entirely; keeping 笔试 as a level would either print a
-  // phantom count (depth-based counting credits it to anyone who got further)
-  // or print 0 above a larger 一面, which reads as a broken funnel.
+  // Only render stages that actually occurred. Counts are independent, so
+  // a later display row may be larger than an earlier one.
   const occurred = new Set(apps.flatMap((a) => a.stageHistory.map((h) => h.stage)));
 
   const levels: FunnelLevel[] = [];
@@ -71,13 +78,9 @@ export function computeFunnel(apps: FunnelApplication[]): {
       count,
       shareOfTotal: total > 0 ? count / total : 0,
       stepRate: null,
+      smallSample: count < SMALL_SAMPLE_THRESHOLD,
     });
   });
-
-  for (let i = 1; i < levels.length; i++) {
-    const prev = levels[i - 1].count;
-    levels[i].stepRate = prev > 0 ? levels[i].count / prev : null;
-  }
 
   return { levels, total };
 }

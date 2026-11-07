@@ -3,10 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { applicationSchema, offerUpdateSchema, stageUpdateSchema } from "@/lib/validation";
+import {
+  applicationCoreUpdateSchema,
+  applicationSchema,
+  offerUpdateSchema,
+  stageUpdateSchema,
+} from "@/lib/validation";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
+import { resolveCompanyId } from "@/lib/company-resolver";
 import { toActionResult, UserFacingError, type ActionResult } from "@/lib/action-result";
+import { resyncCurrentStage } from "@/lib/application-stage-history";
+import { terminationFields } from "@/lib/termination";
+import { cleanSchedule, sameSchedule, scheduleOf } from "@/lib/stage-schedule";
 
 export async function createApplication(
   input: z.infer<typeof applicationSchema>
@@ -14,24 +22,27 @@ export async function createApplication(
   const user = await requireUser();
   const data = applicationSchema.parse(input);
 
-  const company = await db.company.upsert({
-    where: { name: data.companyName },
-    update: {},
-    create: { name: data.companyName },
-  });
+  const companyId = await resolveCompanyId(data.companyName, { aiUserId: user.id });
 
   await db.$transaction(async (tx) => {
+    const portals = await tx.applicationPortal.findMany({ where: { companyId }, select: { id: true }, take: 2 });
+    const linked = data.positionId ? await tx.position.findFirst({ where: { id: data.positionId, userId: user.id }, select: { jdText: true, jdUrl: true } }) : null;
     const application = await tx.application.create({
       data: {
+        jdSnapshot: linked?.jdText?.trim() || null,
+        jdSnapshotUrl: linked?.jdText?.trim() ? linked.jdUrl : null,
         userId: user.id,
         positionId: data.positionId ?? undefined,
-        companyId: company.id,
+        companyId,
+        portalId: portals.length === 1 ? portals[0].id : null,
         title: data.title,
         appliedDate: data.appliedDate,
         referrer: data.referrer,
         source: data.source,
         resumeVersionId: data.resumeVersionId ?? undefined,
+        applyUrl: data.applyUrl ?? null,
         currentStage: "APPLIED",
+        currentStageDate: data.appliedDate,
       },
     });
 
@@ -42,6 +53,11 @@ export async function createApplication(
         enteredAt: data.appliedDate,
       },
     });
+    if (application.portalId) {
+      // The page can be text-identical to the last check while this new
+      // application has never been matched against it.
+      await tx.applicationPortal.update({ where: { id: application.portalId }, data: { contentHash: null } });
+    }
   });
 
   revalidatePath("/applications");
@@ -50,7 +66,7 @@ export async function createApplication(
 
 export async function addStageUpdate(
   applicationId: string,
-  input: z.infer<typeof stageUpdateSchema>
+  input: z.infer<typeof stageUpdateSchema> & { enteredAt?: Date | string }
 ) {
   const user = await requireUser();
   const application = await db.application.findFirst({
@@ -59,27 +75,36 @@ export async function addStageUpdate(
   if (!application) throw new Error("未找到该投递记录");
 
   const data = stageUpdateSchema.parse(input);
+  // Defaults to now, same as before this accepted an override — the board's
+  // drag-to-a-column interaction is the one caller that actually sets this,
+  // for backdating/correcting when a stage change really happened.
+  const enteredAt = input.enteredAt ? new Date(input.enteredAt) : new Date();
+  if (Number.isNaN(enteredAt.getTime())) throw new Error("时间格式不对");
+
+  const schedule = cleanSchedule({
+    nextDeadline: data.nextDeadline ?? null,
+    nextDeadlineEnd: data.nextDeadlineEnd ?? null,
+    nextHasTime: data.nextHasTime,
+    meetingInfo: data.meetingInfo,
+    remindMinutes: data.remindMinutes,
+  });
 
   const stageHistoryId = await db.$transaction(async (tx) => {
     const created = await tx.stageHistory.create({
       data: {
         applicationId,
         stage: data.stage,
+        ...terminationFields(data.stage, data.terminatedAtStage === undefined ? application.currentStage : data.terminatedAtStage, data.terminatedAtStageLabel === undefined ? (data.terminatedAtStage === undefined || data.terminatedAtStage === application.currentStage ? application.currentStageLabel : null) : data.terminatedAtStageLabel),
+        stageLabel: data.stageLabel || null,
         note: data.note,
         interviewFormat: data.interviewFormat,
         interviewer: data.interviewer,
-        nextDeadline: data.nextDeadline ?? undefined,
-        nextDeadlineEnd: data.nextDeadlineEnd ?? undefined,
+        ...schedule,
+        enteredAt,
       },
     });
 
-    await tx.application.update({
-      where: { id: applicationId },
-      data: {
-        currentStage: data.stage,
-        currentStageDate: new Date(),
-      },
-    });
+    await resyncCurrentStage(tx, applicationId);
 
     return created.id;
   });
@@ -121,6 +146,38 @@ export async function deleteApplication(id: string) {
   revalidatePath("/interviews");
 }
 
+export async function updateApplication(
+  applicationId: string,
+  input: z.infer<typeof applicationCoreUpdateSchema>
+) {
+  const user = await requireUser();
+  const application = await db.application.findFirst({
+    where: { id: applicationId, userId: user.id },
+  });
+  if (!application) throw new Error("未找到该投递记录");
+
+  const data = applicationCoreUpdateSchema.parse(input);
+  const nextCity = data.city !== undefined ? (data.city?.trim() || null) : undefined;
+  const cityChanged = nextCity !== undefined && nextCity !== (application.city ?? null);
+
+  await db.application.update({
+    where: { id: applicationId },
+    data: {
+      appliedDate: data.appliedDate,
+      referrer: data.referrer || null,
+      source: data.source || null,
+      resumeVersionId: data.resumeVersionId || null,
+      // Only clear citySource when the city value actually changed; editing
+      // channel or referrer alone must not turn a guessed city into manual.
+      ...(cityChanged ? { city: nextCity, citySource: null } : {}),
+    },
+  });
+
+  revalidatePath(`/applications/${applicationId}`);
+  revalidatePath("/applications");
+  revalidatePath("/dashboard");
+}
+
 export async function updateApplicationOffer(
   applicationId: string,
   input: z.infer<typeof offerUpdateSchema>
@@ -151,27 +208,6 @@ export async function updateApplicationOffer(
 }
 
 /**
- * Recomputes the application's current stage from whatever history remains.
- * Called after an edit or a delete: currentStage is a denormalised copy of
- * "the newest history row", and leaving it pointing at a row that was just
- * changed or removed is how the record silently starts lying.
- */
-async function resyncCurrentStage(
-  tx: Prisma.TransactionClient,
-  applicationId: string
-): Promise<void> {
-  const latest = await tx.stageHistory.findFirst({
-    where: { applicationId },
-    orderBy: { enteredAt: "desc" },
-  });
-  if (!latest) return;
-  await tx.application.update({
-    where: { id: applicationId },
-    data: { currentStage: latest.stage, currentStageDate: latest.enteredAt },
-  });
-}
-
-/**
  * Corrects one timeline entry. Misclicks are routine — the board's
  * one-click advance makes them more so — and without this the only fix was
  * to leave the wrong stage sitting in the record forever.
@@ -193,15 +229,29 @@ export async function updateStageHistory(
       throw new UserFacingError("时间格式不对");
     }
 
+    // Fields a caller leaves out keep what the row has.
+    const schedule = cleanSchedule({
+      nextDeadline: data.nextDeadline ?? null,
+      nextDeadlineEnd: data.nextDeadlineEnd ?? null,
+      nextHasTime: data.nextHasTime ?? existing.nextHasTime,
+      meetingInfo: data.meetingInfo === undefined ? existing.meetingInfo : data.meetingInfo,
+      remindMinutes: data.remindMinutes === undefined ? (existing.nextHasTime ? existing.remindMinutes : undefined) : data.remindMinutes,
+    });
+    // A time the user edits is theirs from then on, not the email's.
+    const retimed = !sameSchedule({ ...schedule, scheduleSource: null }, scheduleOf(existing));
+
     await db.$transaction(async (tx) => {
       await tx.stageHistory.update({
         where: { id },
         data: {
           stage: data.stage,
+          ...terminationFields(data.stage, data.terminatedAtStage === undefined ? existing.terminatedAtStage : data.terminatedAtStage, data.terminatedAtStageLabel === undefined ? (data.terminatedAtStage === undefined || data.terminatedAtStage === existing.terminatedAtStage ? existing.terminatedAtStageLabel : null) : data.terminatedAtStageLabel),
+          stageLabel: data.stageLabel || null,
           note: data.note || null,
           interviewFormat: data.interviewFormat || null,
           interviewer: data.interviewer || null,
-          nextDeadline: data.nextDeadline ?? null,
+          ...schedule,
+          ...(retimed ? { scheduleSource: null } : {}),
           ...(enteredAt ? { enteredAt } : {}),
         },
       });
@@ -240,6 +290,24 @@ export async function deleteStageHistory(id: string): Promise<ActionResult<null>
     revalidatePath(`/applications/${existing.applicationId}`);
     revalidatePath("/applications");
     revalidatePath("/dashboard");
+    return null;
+  });
+}
+
+/**
+ * 投递记录 sorted 自定义: the whole list in the order the user dragged it into.
+ * Only the user's own rows are touched; the order is just their position.
+ */
+export async function reorderApplications(ids: string[]): Promise<ActionResult<null>> {
+  return toActionResult(async () => {
+    const user = await requireUser();
+    const parsed = z.array(z.string().min(1).max(100)).max(5000).safeParse(ids);
+    if (!parsed.success) throw new UserFacingError("排序数据不对，请刷新后重试");
+    const order = [...new Set(parsed.data)];
+    const owned = new Set((await db.application.findMany({ where: { userId: user.id, id: { in: order } }, select: { id: true } })).map((row) => row.id));
+    const mine = order.filter((id) => owned.has(id));
+    await db.$transaction(mine.map((id, index) => db.application.update({ where: { id }, data: { sortOrder: index } })));
+    revalidatePath("/applications");
     return null;
   });
 }

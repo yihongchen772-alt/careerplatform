@@ -1,9 +1,11 @@
-/**
- * The app icon, inlined as SVG so it renders crisply at nav size — a downscaled
- * raster of the same mark turns to mush at 28px. Keep in sync with
- * `public/icon-source.svg`, which generates the PWA/favicon PNGs.
- */
+"use client";
+
+import { useId } from "react";
+
+/** Crisp in-app version of public/icon-source.svg. */
 export function BrandMark({ className }: { className?: string }) {
+  const id = useId();
+
   return (
     <svg
       viewBox="0 0 512 512"
@@ -12,50 +14,26 @@ export function BrandMark({ className }: { className?: string }) {
       role="presentation"
     >
       <defs>
-        <linearGradient
-          id="brand-mark-bg"
-          x1="0"
-          y1="0"
-          x2="512"
-          y2="512"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0" stopColor="#6366f1" />
-          <stop offset="1" stopColor="#7c3aed" />
+        <linearGradient id={`${id}-canvas`} x1="42" y1="28" x2="476" y2="500" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#24354D" />
+          <stop offset="0.52" stopColor="#17243A" />
+          <stop offset="1" stopColor="#0D1729" />
+        </linearGradient>
+        <linearGradient id={`${id}-needle`} x1="205" y1="117" x2="305" y2="370" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#FFFFFF" />
+          <stop offset="1" stopColor="#D8E9F9" />
+        </linearGradient>
+        <linearGradient id={`${id}-tail`} x1="216" y1="276" x2="306" y2="391" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#B6D7F2" />
+          <stop offset="1" stopColor="#6DA4D4" />
         </linearGradient>
       </defs>
-
-      <rect width="512" height="512" rx="112" fill="url(#brand-mark-bg)" />
-
-      <text
-        x="256"
-        y="212"
-        fontFamily="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif"
-        fontSize="180"
-        fontWeight="700"
-        fill="#ffffff"
-        textAnchor="middle"
-      >
-        秋
-      </text>
-
-      <g fill="#ffffff" opacity="0.3">
-        <rect x="104" y="360" width="52" height="60" rx="16" />
-        <rect x="180" y="322" width="52" height="98" rx="16" />
-        <rect x="256" y="284" width="52" height="136" rx="16" />
-        <rect x="332" y="246" width="52" height="174" rx="16" />
-      </g>
-
-      <g
-        stroke="#ffffff"
-        strokeWidth="22"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      >
-        <path d="M120 356 L206 316 L282 274 L370 226" />
-        <path d="M312 224 L374 222 L376 284" />
-      </g>
+      <rect width="512" height="512" rx="116" fill={`url(#${id}-canvas)`} />
+      <rect x="2" y="2" width="508" height="508" rx="114" fill="none" stroke="#FFFFFF" strokeOpacity="0.13" strokeWidth="4" />
+      <circle cx="256" cy="256" r="149" fill="none" stroke="#D5E9FB" strokeOpacity="0.28" strokeWidth="7" />
+      <path d="M256 113 328 345 256 303 184 345 256 113Z" fill={`url(#${id}-needle)`} />
+      <path d="m184 345 72-42 72 42-72 64-72-64Z" fill={`url(#${id}-tail)`} />
+      <path d="m256 303 72 42-72 64V303Z" fill="#7AADD8" />
     </svg>
   );
 }

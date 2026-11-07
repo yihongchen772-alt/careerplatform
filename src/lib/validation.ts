@@ -1,36 +1,17 @@
 import { z } from "zod";
 
-export const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8, "密码至少 8 位"),
-  name: z.string().min(1).optional(),
-  school: z.string().optional(),
-  targetTrack: z.string().optional(),
-  graduationYear: z.coerce.number().int().optional(),
-});
-
 export const updateProfileSchema = z.object({
   name: z.string().min(1).optional(),
+  phone: z.string().optional(),
+  contactEmail: z.string().optional(),
+  gender: z.string().optional(),
+  birthDate: z.string().optional(),
   school: z.string().optional(),
   targetTrack: z.string().optional(),
   graduationYear: z.coerce.number().int().optional(),
   skills: z.string().optional(),
   preferredCities: z.string().optional(),
   expectedSalaryMin: z.coerce.number().int().optional(),
-});
-
-export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1),
-  newPassword: z.string().min(8, "密码至少 8 位"),
-});
-
-export const requestPasswordResetSchema = z.object({
-  email: z.string().email(),
-});
-
-export const resetPasswordSchema = z.object({
-  token: z.string().min(1),
-  newPassword: z.string().min(8, "密码至少 8 位"),
 });
 
 export const aiProviderValues = [
@@ -40,13 +21,39 @@ export const aiProviderValues = [
   "kimi",
   "anthropic",
   "qwen",
+  "xai",
+  "mistral",
+  "zhipu",
+  "doubao",
 ] as const;
 
 export const aiSettingsSchema = z.object({
   provider: z.enum(aiProviderValues),
-  apiKey: z.string().min(1, "请填写 API Key"),
+  /// Optional: blank means "keep whatever key is already saved" — the
+  /// client never gets the decrypted key back to pre-fill this field, so
+  /// requiring it on every save would force retyping it just to change the
+  /// model. upsertAiKey enforces it's present when there's no existing row.
+  apiKey: z.string().optional(),
   model: z.string().optional(),
   baseUrl: z.string().url("请输入合法的地址").optional(),
+});
+
+export const emailSettingsSchema = z.object({
+  host: z.string().min(1, "请填写 SMTP 服务器地址"),
+  port: z.coerce.number().int().min(1).max(65535),
+  user: z.string().email("请填写合法的邮箱地址"),
+  password: z.string().min(1, "请填写授权码/应用密码"),
+  from: z.string().email().optional(),
+});
+
+/** One inbox to scan — see MailAccount in prisma/schema.prisma for why this
+ * is a list instead of living on User like the SMTP-send fields above. */
+export const mailAccountSchema = z.object({
+  label: z.string().optional(),
+  imapHost: z.string().min(1, "请填写 IMAP 服务器地址"),
+  imapPort: z.coerce.number().int().min(1).max(65535),
+  email: z.string().email("请填写合法的邮箱地址"),
+  password: z.string().min(1, "请填写授权码/应用密码"),
 });
 
 export const positionStatusValues = [
@@ -57,6 +64,7 @@ export const positionStatusValues = [
 ] as const;
 
 export const positionSchema = z.object({
+  recruitmentType: z.enum(["校招", "实习", "社招"]).optional().nullable(),
   companyName: z.string().min(1, "公司名称必填"),
   title: z.string().min(1, "岗位名称必填"),
   track: z.string().optional(),
@@ -81,10 +89,12 @@ export const positionSchema = z.object({
 });
 
 export const applicationStageValues = [
+  "WITHDRAWN", "CANCELLED",
   "APPLIED",
   "SCREENING",
   "ASSESSMENT",
   "OA",
+  "AI_INTERVIEW",
   "INTERVIEW_1",
   "INTERVIEW_2",
   "INTERVIEW_3",
@@ -103,6 +113,17 @@ export const applicationSchema = z.object({
   referrer: z.string().optional(),
   source: z.string().optional(),
   resumeVersionId: z.string().optional().nullable(),
+  /** Page the 网申 was submitted from, when recorded from the embedded browser. */
+  applyUrl: z.string().trim().max(2000).regex(/^https?:\/\//i).optional().nullable(),
+});
+
+export const applicationCoreUpdateSchema = z.object({
+  appliedDate: z.coerce.date(),
+  referrer: z.string().optional(),
+  source: z.string().optional(),
+  resumeVersionId: z.string().optional().nullable(),
+  /** City set by hand; empty goes back to reading it from the 岗位 or title. */
+  city: z.string().trim().max(40).optional().nullable(),
 });
 
 export const offerUpdateSchema = z.object({
@@ -110,7 +131,7 @@ export const offerUpdateSchema = z.object({
   salaryMax: z.coerce.number().int().optional().nullable(),
   offerNote: z.string().optional(),
   // Comparison dimensions beyond headline salary — see Application in
-  // prisma/schema.prisma.
+  // prisma/schema.prisma for why these exist.
   offerAnnualTotal: z.coerce.number().int().optional().nullable(),
   commuteMinutes: z.coerce.number().int().optional().nullable(),
   overtimeNote: z.string().optional(),
@@ -118,7 +139,10 @@ export const offerUpdateSchema = z.object({
 });
 
 export const stageUpdateSchema = z.object({
+  terminatedAtStage: z.enum(applicationStageValues).optional().nullable(),
+  terminatedAtStageLabel: z.string().trim().max(100).optional().nullable(),
   stage: z.enum(applicationStageValues),
+  stageLabel: z.string().trim().max(100, "企业阶段名称不能超过 100 字").optional(),
   note: z.string().optional(),
   interviewFormat: z.string().optional(),
   interviewer: z.string().optional(),
@@ -127,6 +151,12 @@ export const stageUpdateSchema = z.object({
   /// 时间可测") rather than a single moment — 笔试/测评链接routinely give a
   /// window, not a fixed slot the way an interview appointment does.
   nextDeadlineEnd: z.coerce.date().optional().nullable(),
+  /// nextDeadline includes a clock time (面试 at 14:00), not just a day.
+  nextHasTime: z.boolean().optional(),
+  /// 会议链接 / 会议号 / 地点.
+  meetingInfo: z.string().trim().max(2000, "会议信息不能超过 2000 字").optional().nullable(),
+  /// Minutes before a timed step to remind; null = no reminder.
+  remindMinutes: z.number().int().min(0).max(10080).optional().nullable(),
 });
 
 export const resumeVersionSchema = z.object({
@@ -179,12 +209,47 @@ export const interviewPrepSchema = z.object({
 
 export type InterviewPrep = z.infer<typeof interviewPrepSchema>;
 
+/// 群面（无领导小组讨论）是校招高频但和一对一面试完全不同的技能——发言
+/// 时机、角色分配、怎么在讨论里露脸而不抢话，这些一对一的 interviewPrep
+/// 答不上，所以是独立的 schema/生成流程，见 group-interview-prep.ts。
+export const groupInterviewPrepSchema = z.object({
+  overview: z.string(),
+  roleStrategy: z.string(),
+  tips: z.array(
+    z.object({
+      title: z.string(),
+      detail: z.string(),
+    })
+  ),
+  pitfalls: z.array(z.string()),
+  practiceTopic: z.object({
+    topic: z.string(),
+    instructions: z.string(),
+  }),
+});
+
+export type GroupInterviewPrep = z.infer<typeof groupInterviewPrepSchema>;
+
 export const interviewQaSchema = z.object({
   summary: z.string(),
+  /// A JD-derived 备考大纲 — which modules to prepare and why, before the
+  /// flat question list. questionCount is a suggested split, not a promise
+  /// the question list below sums to exactly this per module.
+  outline: z.array(
+    z.object({
+      module: z.string(),
+      reason: z.string(),
+      questionCount: z.number(),
+    })
+  ),
   questions: z.array(
     z.object({
       question: z.string(),
       category: z.string(),
+      /// Ties into QuestionBankItem.module (src/lib/question-bank-shared.ts)
+      /// so saveQaAsBank's items land pre-tagged, no separate classification
+      /// pass needed.
+      module: z.string().nullish(),
       referenceAnswer: z.string(),
       tips: z.string(),
     })
@@ -219,6 +284,11 @@ export const startInterviewSessionSchema = z.object({
   resumeVersionId: z.string().min(1),
   positionId: z.string().optional().nullable(),
   targetRole: z.string().optional(),
+  includeCoding: z.boolean().optional(),
+  /// A suggested category weighting from InterviewIntelligence ("40% C++ /
+  /// 25% 算法比较 / ..."), copied onto the session at start time — see
+  /// interview-session.ts for where it's woven into the interviewer prompt.
+  focusMix: z.string().optional(),
 });
 
 export const sendInterviewMessageSchema = z.object({
@@ -253,4 +323,27 @@ export const companyDirectoryEntrySchema = z.object({
   careerUrl: z.string().url("请输入合法的链接"),
   sector: z.enum(companyDirectorySectors).optional(),
   industry: z.string().optional(),
+});
+
+export const registerSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8, "密码至少 8 位"),
+  name: z.string().min(1).optional(),
+  school: z.string().optional(),
+  targetTrack: z.string().optional(),
+  graduationYear: z.coerce.number().int().optional(),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8, "密码至少 8 位"),
+});
+
+export const requestPasswordResetSchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z.string().min(8, "密码至少 8 位"),
 });

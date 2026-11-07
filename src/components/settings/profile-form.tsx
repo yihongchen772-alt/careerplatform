@@ -14,6 +14,10 @@ export function ProfileForm({
 }: {
   initial: {
     name: string | null;
+    phone: string | null;
+    contactEmail: string | null;
+    gender: string | null;
+    birthDate: string | null;
     school: string | null;
     targetTrack: string | null;
     graduationYear: number | null;
@@ -23,6 +27,10 @@ export function ProfileForm({
   };
 }) {
   const [name, setName] = useState(initial.name ?? "");
+  const [phone, setPhone] = useState(initial.phone ?? "");
+  const [contactEmail, setContactEmail] = useState(initial.contactEmail ?? "");
+  const [gender, setGender] = useState(initial.gender ?? "");
+  const [birthDate, setBirthDate] = useState(initial.birthDate ?? "");
   const [school, setSchool] = useState(initial.school ?? "");
   const [targetTrack, setTargetTrack] = useState(initial.targetTrack ?? "");
   const [graduationYear, setGraduationYear] = useState(
@@ -43,6 +51,10 @@ export function ProfileForm({
     try {
       await updateProfile({
         name: name || undefined,
+        phone: phone || undefined,
+        contactEmail: contactEmail || undefined,
+        gender: gender || undefined,
+        birthDate: birthDate || undefined,
         school: school || undefined,
         targetTrack: targetTrack || undefined,
         graduationYear: graduationYear ? Number(graduationYear) : undefined,
@@ -71,6 +83,28 @@ export function ProfileForm({
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">昵称</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">
+                手机号（网申自动填表会用到）
+              </Label>
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">
+                邮箱（网申自动填表会用到，不是登录邮箱）
+              </Label>
+              <Input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">性别（网申自动填表会用到）</Label>
+              <Input value={gender} onChange={(e) => setGender(e.target.value)} placeholder="男 / 女" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">
+                出生日期（网申自动填表会用到）
+              </Label>
+              <Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">学校</Label>

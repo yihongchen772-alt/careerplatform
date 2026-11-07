@@ -19,14 +19,63 @@ import { z } from "zod";
  * wrong most often, whereas one flat object with nullable fields survives.
  */
 export const assistantActionSchema = z.object({
-  type: z.enum(["add_task", "log_application", "add_position", "update_stage"]),
+  type: z.enum([
+    "add_task",
+    "log_application",
+    "add_position",
+    "update_stage",
+    "promote_lead",
+    "add_contact",
+    "mark_position_applied",
+    "update_application",
+    "delete_position",
+    "withdraw_application",
+    "complete_task",
+    "mark_contacted",
+    "set_schedule",
+    "reschedule",
+    "complete_step",
+    "save_note",
+    "mark_followed_up",
+    "set_city",
+    "update_offer",
+    "update_position",
+    "add_calendar_event",
+    "complete_calendar_event",
+    "update_profile",
+    "update_company_industry",
+    "add_journey",
+  ]),
   label: z.string(),
   companyName: z.string().nullish(),
   title: z.string().nullish(),
+  /// A person's name, only for add_contact — kept separate from `title`
+  /// (used for job/position titles by every other action type; reusing it
+  /// for a person's name would collide in meaning).
+  contactName: z.string().nullish(),
   date: z.string().nullish(),
+  /// Window end, for a 笔试/测评 that gives a range ("8/26-8/30 期间") rather
+  /// than a single deadline — mirrors StageHistory.nextDeadlineEnd /
+  /// PersonalTask.dueDateEnd.
+  dateEnd: z.string().nullish(),
   stage: z.string().nullish(),
   targetId: z.string().nullish(),
   note: z.string().nullish(),
+  /// A job's link, for add_position (from 「找岗位」).
+  url: z.string().nullish(),
+  /// The work city for set_city / update_position / update_profile / log_application.
+  city: z.string().nullish(),
+  /// Offer / position salary fields (monthly in K, annual total in 万元).
+  salaryMin: z.number().int().min(0).max(500).nullish(),
+  salaryMax: z.number().int().min(0).max(500).nullish(),
+  offerAnnualTotal: z.number().int().min(0).max(5000).nullish(),
+  commuteMinutes: z.number().int().min(0).max(600).nullish(),
+  overtimeNote: z.string().nullish(),
+  growthNote: z.string().nullish(),
+  /// For update_position: EVALUATING | PLANNED | DROPPED (or Chinese equivalents).
+  positionStatus: z.string().nullish(),
+  /// For add_journey: happy | ok | down | angry | cry (or Chinese equivalents).
+  mood: z.string().nullish(),
 });
 
 export type AssistantAction = z.infer<typeof assistantActionSchema>;

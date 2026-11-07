@@ -15,6 +15,54 @@ export function toDateKey(date: Date): string {
 }
 
 /** Today as `YYYY-MM-DD` in the viewer's own timezone. */
+/**
+ * Is a mail older than a stage's date? A stage date entered as a day is stored
+ * at UTC midnight, which is 08:00 at UTC+8: a mail at 02:00 that same day isn't older.
+ */
+export function mailBeforeStage(mailDate: Date, stageDate: Date): boolean {
+  const dateOnly = stageDate.getTime() % 86_400_000 === 0;
+  return dateOnly ? toDateKey(mailDate) < stageDate.toISOString().slice(0, 10) : mailDate.getTime() < stageDate.getTime();
+}
+
+/** 「2026-11-06 01:30」, this machine's clock: what an AI needs to read 「今天」 in a mail. */
+export function localStamp(date: Date): string {
+  return `${toDateKey(date)} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 export function todayKey(): string {
   return toDateKey(new Date());
+}
+
+/**
+ * Monday of the current local week, as `YYYY-MM-DD` — matches the Chinese
+ * convention of a week starting Monday, not the JS Date/Sunday-first default.
+ * getDay() returns 0 for Sunday, so it needs its own offset (6 days back)
+ * rather than fitting the same `day - 1` formula as the other weekdays.
+ */
+export function weekStartKey(date: Date = new Date()): string {
+  const day = date.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const monday = new Date(date);
+  monday.setDate(date.getDate() - diff);
+  return toDateKey(monday);
+}
+
+/**
+ * `daysAgo(14)` as a Date, for "gte" query bounds — a thin wrapper so
+ * `Date.now()` is called from a plain lib function rather than inline in a
+ * Server Component's render body, which the react-hooks/purity rule (rightly)
+ * flags as an impure call.
+ */
+export function daysAgo(days: number): Date {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+}
+
+/**
+ * The current instant in ms, for a Server Component to hand to the client
+ * as the starting point of a countdown (so server and client render the same
+ * text before the client starts ticking). A plain function for the same
+ * react-hooks/purity reason as daysAgo.
+ */
+export function currentTimeMs(): number {
+  return Date.now();
 }

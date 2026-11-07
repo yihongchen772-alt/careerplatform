@@ -90,9 +90,44 @@ export async function exportMyData(): Promise<ActionResult<ExportedBackup>> {
       : [];
 
     const interviewMessages = interviewSessionsRaw.flatMap((s) => s.messages);
-    const interviewSessions = interviewSessionsRaw.map(({ messages: _messages, ...s }) => s);
+    const interviewSessions = interviewSessionsRaw.map(({ messages, ...s }) => (void messages, s));
 
-    const { passwordHash: _passwordHash, ...userSafe } = user;
+    // Secrets stay on the server: hashes are useless elsewhere and the
+    // encrypted columns can only be read with this deployment's key.
+    /* eslint-disable @typescript-eslint/no-unused-vars */
+    const {
+      passwordHash: _passwordHash,
+      smtpPasswordEncrypted: _smtpPassword,
+      webdavPasswordEncrypted: _webdavPassword,
+      extensionTokenHash: _extensionToken,
+      ...userSafe
+    } = user;
+    /* eslint-enable @typescript-eslint/no-unused-vars */
+
+    // Everything added since the first export. CampusPosting is left out: it
+    // is a re-downloadable copy of a subscribed sheet and can run to 10k+ rows.
+    const scoped = { where: { userId } };
+    const [
+      applicationMemory, pendingApplicationChange, desktopNote, calendarEvent, dailyDigest,
+      weeklyReview, resumeComparisonSummary, interviewIntelligence, mailAccount, postingSource,
+      interviewNoteExtract, stagePostmortem, positionMatch, resumeTailoring, resumeDrill,
+      skillGapAnalysis, autofillAnswer, groupInterviewPrep, coverLetter, interviewBrief,
+      applicationDraft, agentConversation, agentMemory, agentBrief, journeyEntry,
+    ] = await Promise.all([
+      db.applicationMemory.findMany(scoped), db.pendingApplicationChange.findMany(scoped),
+      db.desktopNote.findMany(scoped), db.calendarEvent.findMany(scoped), db.dailyDigest.findMany(scoped),
+      db.weeklyReview.findMany(scoped), db.resumeComparisonSummary.findMany(scoped),
+      db.interviewIntelligence.findMany(scoped),
+      db.mailAccount.findMany({ ...scoped, omit: { passwordEncrypted: true } }),
+      db.postingSource.findMany(scoped), db.interviewNoteExtract.findMany(scoped),
+      db.stagePostmortem.findMany(scoped), db.positionMatch.findMany(scoped),
+      db.resumeTailoring.findMany(scoped), db.resumeDrill.findMany(scoped),
+      db.skillGapAnalysis.findMany(scoped), db.autofillAnswer.findMany(scoped),
+      db.groupInterviewPrep.findMany(scoped), db.coverLetter.findMany(scoped),
+      db.interviewBrief.findMany(scoped), db.applicationDraft.findMany(scoped),
+      db.agentConversation.findMany(scoped), db.agentMemory.findMany(scoped),
+      db.agentBrief.findMany(scoped), db.journeyEntry.findMany(scoped),
+    ]);
 
     return {
       backupVersion: BACKUP_VERSION,
@@ -116,6 +151,11 @@ export async function exportMyData(): Promise<ActionResult<ExportedBackup>> {
         jobLead: jobLeads,
         questionBank: questionBanks,
         examSession: examSessions,
+        applicationMemory, pendingApplicationChange, desktopNote, calendarEvent, dailyDigest,
+        weeklyReview, resumeComparisonSummary, interviewIntelligence, mailAccount, postingSource,
+        interviewNoteExtract, stagePostmortem, positionMatch, resumeTailoring, resumeDrill,
+        skillGapAnalysis, autofillAnswer, groupInterviewPrep, coverLetter, interviewBrief,
+        applicationDraft, agentConversation, agentMemory, agentBrief, journeyEntry,
       },
       files: {},
     };

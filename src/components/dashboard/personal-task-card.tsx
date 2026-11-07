@@ -1,8 +1,9 @@
 "use client";
+import { MailEventDialog } from "@/components/dashboard/mail-event-dialog";
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { ListChecks, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,22 +12,37 @@ import {
   PersonalTaskFormDialog,
   type PersonalTaskInitial,
 } from "@/components/dashboard/personal-task-form-dialog";
-import { toggleTaskDone, deletePersonalTask } from "@/lib/actions/personal-tasks";
+import { toggleTaskDone, deletePersonalTask, cleanupDuplicateImportedTasks } from "@/lib/actions/personal-tasks";
 
 type LinkOption = { id: string; label: string };
 
-export type PersonalTaskRow = PersonalTaskInitial & { done: boolean };
+/** 「已逾期 2 天」 / 「今天」 / 「明天」 / 「3 天后」 for a date within a week; nothing further out. */
+export function dueTag(dueDate: string, now: number): { text: string; late: boolean } | null {
+  const due = new Date(dueDate);
+  const today = new Date(now);
+  const days = Math.round((new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86_400_000);
+  if (days < 0) return { text: `已逾期 ${-days} 天`, late: true };
+  if (days === 0) return { text: "今天", late: true };
+  if (days === 1) return { text: "明天", late: true };
+  if (days <= 7) return { text: `${days} 天后`, late: false };
+  return null;
+}
+
+export type PersonalTaskRow = PersonalTaskInitial & { done: boolean; mailEventDraft?: unknown; mailEventId?: string | null };
 
 export function PersonalTaskCard({
   tasks,
   positions,
   applications,
+  duplicateMailTaskCount,
 }: {
   tasks: PersonalTaskRow[];
   positions: LinkOption[];
   applications: LinkOption[];
+  duplicateMailTaskCount: number;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [now] = useState(() => Date.now());
 
   const pending = tasks
     .filter((t) => !t.done)
@@ -59,25 +75,41 @@ export function PersonalTaskCard({
   }
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle>我的日程</CardTitle>
-        <PersonalTaskFormDialog
-          positions={positions}
-          applications={applications}
-          trigger={
-            <Button size="sm" variant="outline">
-              <Plus />
-              添加
-            </Button>
-          }
-        />
+    <Card className="surface-card rounded-xl">
+      <CardHeader className="flex flex-col items-start justify-between gap-2 space-y-0 sm:flex-row sm:items-center">
+        <CardTitle className="flex items-center gap-2.5"><span className="section-chip flex size-8 items-center justify-center rounded-xl bg-primary/10 text-primary"><ListChecks className="size-4" /></span>我的待办</CardTitle>
+        <div className="flex flex-wrap items-center gap-2">
+          {duplicateMailTaskCount > 0 && <ConfirmDeleteButton
+            trigger={<Button size="sm" variant="ghost">清理重复邮件（{duplicateMailTaskCount}）</Button>}
+            title={`清理 ${duplicateMailTaskCount} 条重复邮件日程？`}
+            description="只删除内容完全相同、未完成且没有日期或岗位关联的旧邮件导入项；其他日程不会删除。"
+            onConfirm={async () => {
+              try {
+                const count = await cleanupDuplicateImportedTasks();
+                toast.success(count > 0 ? `已清理 ${count} 条重复日程` : "没有可清理的重复日程");
+              } catch {
+                toast.error("清理失败，请重试");
+              }
+            }}
+          />}
+          <PersonalTaskFormDialog
+            positions={positions}
+            applications={applications}
+            trigger={
+              <Button size="sm" variant="outline">
+                <Plus />
+                添加
+              </Button>
+            }
+          />
+        </div>
       </CardHeader>
       <CardContent className="space-y-2">
         {tasks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            自己写点安排，比如&ldquo;周五前联系内推人&rdquo;&ldquo;复习 XX 准备二面&rdquo;，可以关联到具体的岗位或投递记录
-          </p>
+          <div className="rounded-xl border border-border/50 bg-background/30 px-4 py-5">
+            <p className="text-sm font-medium">记下自己要做的事</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">例如联系内推人、准备二面，也可以关联到对应岗位。面试和笔试的时间请在「日历」里添加。</p>
+          </div>
         ) : (
           <>
             {pending.map((t) => (
@@ -87,6 +119,7 @@ export function PersonalTaskCard({
                 positions={positions}
                 applications={applications}
                 busy={busy === t.id}
+                now={now}
                 onToggle={handleToggle}
                 onDelete={handleDelete}
               />
@@ -104,6 +137,7 @@ export function PersonalTaskCard({
                       positions={positions}
                       applications={applications}
                       busy={busy === t.id}
+                      now={now}
                       onToggle={handleToggle}
                       onDelete={handleDelete}
                     />
@@ -123,6 +157,7 @@ function TaskRow({
   positions,
   applications,
   busy,
+  now,
   onToggle,
   onDelete,
 }: {
@@ -130,12 +165,14 @@ function TaskRow({
   positions: LinkOption[];
   applications: LinkOption[];
   busy: boolean;
+  now: number;
   onToggle: (id: string, next: boolean) => void;
   onDelete: (id: string) => void;
 }) {
   const linked =
     positions.find((p) => p.id === task.positionId) ??
     applications.find((a) => a.id === task.applicationId);
+  const tag = !task.done && task.dueDate ? dueTag(task.dueDateEnd ?? task.dueDate, now) : null;
 
   return (
     <div className="flex items-start gap-2 rounded-md border p-2 text-sm">
@@ -148,17 +185,22 @@ function TaskRow({
       />
       <div className="min-w-0 flex-1">
         <p className={task.done ? "truncate text-muted-foreground line-through" : "truncate font-medium"}>
+          {tag && <span className={tag.late ? "mr-1.5 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[11px] font-normal text-destructive" : "mr-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground"}>{tag.text}</span>}
           {task.title}
         </p>
         <p className="text-xs text-muted-foreground">
           {[
-            task.dueDate && new Date(task.dueDate).toLocaleDateString(),
+            task.dueDate &&
+              (task.dueDateEnd
+                ? `${new Date(task.dueDate).toLocaleDateString("zh-CN")} - ${new Date(task.dueDateEnd).toLocaleDateString("zh-CN")}`
+                : new Date(task.dueDate).toLocaleDateString("zh-CN")),
             linked?.label,
           ]
             .filter(Boolean)
             .join(" · ")}
         </p>
-        {task.note && <p className="mt-1 text-xs">{task.note}</p>}
+        {task.note && <TaskNote note={task.note} />}
+        {task.mailEventDraft ? <MailEventDialog taskId={task.id} initial={task.mailEventDraft} eventId={task.mailEventId} /> : null}
       </div>
       <div className="flex shrink-0 gap-1">
         <PersonalTaskFormDialog
@@ -182,5 +224,22 @@ function TaskRow({
         />
       </div>
     </div>
+  );
+}
+
+// Tasks made from a mail carry the mail's subject / sender / inbox below the
+// summary; on the card only the summary shows, the rest on hover.
+const MAIL_META = /^(?:邮件主题|来自|收件箱|发件人)[：:]/;
+
+function TaskNote({ note }: { note: string }) {
+  const lines = note.split("\n").map((line) => line.trim());
+  const meta = lines.filter((line) => MAIL_META.test(line));
+  const text = lines.filter((line) => line && !MAIL_META.test(line)).join(" ");
+  if (!text && !meta.length) return null;
+  return (
+    <p className="mt-1 text-xs [overflow-wrap:anywhere]" title={meta.length ? meta.join("\n") : undefined}>
+      {text || meta.find((line) => line.startsWith("邮件主题"))?.replace(MAIL_META, "")}
+      {meta.length > 0 && text && <span className="ml-1 text-muted-foreground">· 来自邮件</span>}
+    </p>
   );
 }

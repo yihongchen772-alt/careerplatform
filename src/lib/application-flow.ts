@@ -1,0 +1,39 @@
+import type { ApplicationStage } from "@prisma/client";
+
+const TERMINAL = new Set<ApplicationStage>(["REJECTED", "ACCEPTED", "DECLINED", "WITHDRAWN", "CANCELLED"]);
+const ORDER: ApplicationStage[] = ["APPLIED", "SCREENING", "ASSESSMENT", "OA", "AI_INTERVIEW", "INTERVIEW_1", "INTERVIEW_2", "INTERVIEW_3", "HR_INTERVIEW", "OFFER"];
+
+export type PortalTransition = "none" | "apply" | "review";
+
+/** Only explicit outcome wording counts; silence or a removed job does not. */
+export function isExplicitRejectionStatus(status: string): boolean {
+  return /未通过|未录用|已淘汰|申请失败|不予录用|已拒绝|不合适|很遗憾|rejected|unsuccessful|not selected|not moving forward/i.test(status);
+}
+
+/** A broad-stage order is a safety hint, not a company's actual workflow. */
+export function classifyPortalTransition(current: ApplicationStage, next: ApplicationStage | null): PortalTransition {
+  if (!next || current === next || TERMINAL.has(current) || next === "ACCEPTED" || next === "DECLINED") return "none";
+  if (next === "REJECTED" || next === "CANCELLED" || next === "OFFER") return "review";
+  const from = ORDER.indexOf(current);
+  const to = ORDER.indexOf(next);
+  if (from < 0 || to < 0) return "none";
+  return to > from ? "apply" : "review";
+}
+
+/**
+ * With 自动更新进度 on, a recognised forward step or outcome is written
+ * straight to the timeline (the user can undo it from the banner). A move
+ * *back* is still asked about: candidate portals lag behind real progress
+ * and reminder emails mention earlier rounds, so a stale "一面" must not
+ * undo the "二面" the user already recorded. The user's own decisions stay
+ * out of reach, and closed applications are never reopened.
+ */
+export function classifyAutoTransition(current: ApplicationStage, next: ApplicationStage | null): PortalTransition {
+  if (!next || current === next || TERMINAL.has(current)) return "none";
+  if (next === "ACCEPTED" || next === "DECLINED" || next === "WITHDRAWN") return "none";
+  if (next === "REJECTED" || next === "CANCELLED" || next === "OFFER") return "apply";
+  const from = ORDER.indexOf(current);
+  const to = ORDER.indexOf(next);
+  if (from < 0 || to < 0) return "none";
+  return to > from ? "apply" : "review";
+}

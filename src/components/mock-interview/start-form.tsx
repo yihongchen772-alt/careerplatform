@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -33,16 +34,36 @@ export function MockInterviewStartForm({
   positions,
   applications,
   hasOwnKey,
+  initialFocusMix,
+  initialTarget,
+  initialResumeVersionId,
+  presetLabel,
 }: {
   resumeVersions: ResumeOption[];
   positions: PositionOption[];
   applications: PositionOption[];
   hasOwnKey: boolean;
+  /** Arrived via ?focusMix=... from the 面经库/Interview Intelligence card's
+   * "按推荐配比开始模拟面试" link — carried straight through to
+   * startInterviewSession, not otherwise interpreted here. */
+  initialFocusMix?: string | null;
+  /** `pos:<id>` / `app:<id>`, from a 投递's 「AI 模拟面试」 link. */
+  initialTarget?: string | null;
+  initialResumeVersionId?: string | null;
+  presetLabel?: string | null;
 }) {
   const router = useRouter();
-  const [resumeVersionId, setResumeVersionId] = useState(resumeVersions[0]?.id ?? "");
-  const [target, setTarget] = useState(NONE);
+  const [resumeVersionId, setResumeVersionId] = useState(
+    initialResumeVersionId && resumeVersions.some((r) => r.id === initialResumeVersionId) ? initialResumeVersionId : resumeVersions[0]?.id ?? ""
+  );
+  const [target, setTarget] = useState(() => {
+    if (initialTarget?.startsWith(POS_PREFIX) && positions.some((p) => p.id === initialTarget.slice(POS_PREFIX.length))) return initialTarget;
+    if (initialTarget?.startsWith(APP_PREFIX) && applications.some((a) => a.id === initialTarget.slice(APP_PREFIX.length))) return initialTarget;
+    return NONE;
+  });
   const [targetRole, setTargetRole] = useState("");
+  const [includeCoding, setIncludeCoding] = useState(false);
+  const [focusMix] = useState(initialFocusMix ?? "");
   const [loading, setLoading] = useState(false);
 
   const selectedLabel =
@@ -54,7 +75,7 @@ export function MockInterviewStartForm({
 
   async function handleStart() {
     if (!resumeVersionId) {
-      toast.error("先去简历版本页添加一份简历，并跑一次 AI 体检");
+      toast.error("先去简历版本页添加一份简历");
       return;
     }
     setLoading(true);
@@ -67,6 +88,8 @@ export function MockInterviewStartForm({
           : target === NONE
             ? targetRole || undefined
             : undefined,
+        includeCoding,
+        focusMix: focusMix || undefined,
       });
       if (res.ok) {
         router.push(`/mock-interview/${res.data.sessionId}`);
@@ -86,9 +109,9 @@ export function MockInterviewStartForm({
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            这是多轮对话形式的模拟面试，每一轮都要调用一次 AI。
+            这是多轮对话形式的模拟面试，每一轮都要调用一次 AI，比其他一次性生成的功能耗费多很多。
             请先去{" "}
-            <a href="/settings" className="text-primary underline underline-offset-4">
+            <a href="/settings?tab=ai" className="text-primary underline underline-offset-4">
               账号设置
             </a>{" "}
             配置你自己的 AI API Key 才能用。
@@ -106,7 +129,7 @@ export function MockInterviewStartForm({
       <CardContent className="space-y-4">
         {resumeVersions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            还没有可用的简历——先去简历版本页添加一份简历并跑一次 AI 体检。
+            还没有可用的简历——先去简历版本页添加一份简历。
           </p>
         ) : (
           <>
@@ -179,6 +202,35 @@ export function MockInterviewStartForm({
                 />
               </div>
             )}
+
+            {presetLabel && target !== NONE && (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-2 text-xs">
+                已按投递选好岗位：<span className="font-medium">{presetLabel}</span>，点「开始面试」即可；面试官会结合这个岗位的要求提问。
+              </div>
+            )}
+
+            {focusMix && (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-2 text-xs">
+                <span className="font-medium">{focusMix.startsWith("本场只围绕") ? "本场按简历深挖的追问来问：" : "已按面试情报的推荐配比出题："}</span>
+                {focusMix}
+              </div>
+            )}
+
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                checked={includeCoding}
+                onCheckedChange={(c) => setIncludeCoding(c === true)}
+                className="mt-0.5"
+              />
+              <span>
+                包含代码题
+                <span className="block text-xs text-muted-foreground">
+                  面试官会穿插出算法/编程题，代码直接写在对话框里就行。AI 只做代码层面的讨论和
+                  review（逻辑、边界条件、复杂度），不会真的跑代码判题——这块还是得靠 LeetCode/
+                  牛客验证。
+                </span>
+              </span>
+            </label>
 
             <Button onClick={handleStart} disabled={loading}>
               {loading ? "准备中..." : "开始面试"}
