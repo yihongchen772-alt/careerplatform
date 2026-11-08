@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Spawned by path, so the bundler can't see it.
+  // Loaded at runtime from their own folders, so they stay out of the bundle.
+  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+  // Spawned or read by path, so the bundler can't see them.
   outputFileTracingIncludes: {
-    "/**": ["./career-ops/**/*"],
+    "/**": ["./career-ops/**/*", "./node_modules/@sparticuz/chromium/bin/**"],
   },
   experimental: {
     serverActions: {
