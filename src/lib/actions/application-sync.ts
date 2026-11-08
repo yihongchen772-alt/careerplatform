@@ -212,7 +212,7 @@ async function syncOne(userId: string, portal: {
   if (extraction.needsLogin) {
     // Don't store the hash: once the user logs back in the page will differ
     // anyway, and we want the next check to actually read it.
-    throw new Error("登录已过期——去网申浏览器重新登录这家公司的招聘系统");
+    throw new Error("云版读不到需要登录的进度页");
   }
 
   const now = new Date();

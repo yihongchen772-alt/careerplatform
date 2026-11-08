@@ -154,7 +154,7 @@ export function ApplicationProfileCard({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            投不同方向（比如数据 / 产品）时，可以各存一套实习、项目顺序、期望岗位、自我评价和其他常问字段；教育经历所有方案共用。网申浏览器里选方案，或给方案绑定一份简历、选简历时自动切换。
+            投不同方向（比如数据 / 产品）时，可以各存一套实习、项目顺序、期望岗位、自我评价和其他常问字段；教育经历所有方案共用。在浏览器插件里选方案，或给方案绑定一份简历、选简历时自动切换。
           </p>
           {activeVariant && (
             <div className="flex flex-wrap items-end gap-2">

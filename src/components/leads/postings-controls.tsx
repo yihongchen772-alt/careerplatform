@@ -33,7 +33,7 @@ export function SubscribeCard() {
     <div className="space-y-3 rounded-xl border border-dashed p-5">
       <div>
         <p className="font-medium">订阅一份在线校招信息表</p>
-        <p className="mt-1 text-sm text-muted-foreground">把买到或群里分享的飞书多维表格链接贴进来，求职罗盘会把整张表读进来，每天自动同步；之后在这里按今日新增、快截止、届次和行业筛，点「投递」直接在网申浏览器打开。</p>
+        <p className="mt-1 text-sm text-muted-foreground">把买到或群里分享的飞书多维表格链接贴进来，求职罗盘会把整张表读进来，每天自动同步；之后在这里按今日新增、快截止、届次和行业筛，点「投递」打开招聘页面。</p>
       </div>
       <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(event) => { event.preventDefault(); subscribe(); }}>
         <Input value={link} onChange={(event) => setLink(event.target.value)} placeholder="https://xxxx.feishu.cn/base/……（复制完整链接）" aria-label="飞书表格链接" className="flex-1" />

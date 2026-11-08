@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const data = jd.data;
   const companyName = data.companyName?.trim();
   const positionTitle = data.title?.trim() || title.trim();
-  if (!companyName || !positionTitle) return NextResponse.json({ error: "没从这页识别出公司或岗位，打开 App 手动添加" }, { status: 400 });
+  if (!companyName || !positionTitle) return NextResponse.json({ error: "没从这页识别出公司或岗位，请到求职罗盘网站手动添加" }, { status: 400 });
   const duplicates = await findDuplicatePositions({ companyName, title: positionTitle, jdUrl: url });
   if (duplicates.length) return NextResponse.json({ ok: true, duplicate: true, companyName, title: positionTitle });
   // The AI's salary is in K and may be fractional (日薪 converted to 月薪);

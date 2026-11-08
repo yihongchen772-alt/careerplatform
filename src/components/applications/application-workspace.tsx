@@ -29,5 +29,5 @@ export function ApplicationWorkspace({ id, company, title, stage, revision: init
     <details><summary>最终填写内容（{material.fields.length} 项）</summary><dl className="mt-2 max-h-80 space-y-3 overflow-auto">{material.fields.map((f, i) => <div key={i}><dt className="font-medium">{f.label}</dt><dd className="whitespace-pre-wrap text-muted-foreground">{f.value}</dd></div>)}</dl></details>
     <details><summary>当时的招聘要求</summary><p className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap">{material.jd || "未保存招聘要求"}</p></details>
     <details><summary>当时的资料方案</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(material.profile, null, 2)}</pre></details>
-  </> : <p className="text-muted-foreground">这条历史记录没有材料包。今后从网申浏览器或插件确认「记为已投递」时，可以保存本次材料。</p>}</CardContent></Card></div>;
+  </> : <p className="text-muted-foreground">这条历史记录没有材料包。今后从浏览器插件确认「记为已投递」时，可以保存本次材料。</p>}</CardContent></Card></div>;
 }

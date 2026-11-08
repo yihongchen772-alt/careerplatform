@@ -3,10 +3,14 @@ import { db } from "@/lib/db";
 import { findStaleApplications, findUpcomingPositionDeadlines } from "@/lib/reminders";
 import { sendReminderDigestEmail } from "@/lib/email";
 import { scanInboxOnLaunch } from "@/lib/inbox-scan-core";
+import { checkPostingSources } from "@/lib/campus-sync";
 
 // Stops starting new mailbox scans here; Vercel cuts the function at maxDuration.
-export const maxDuration = 60;
-const SCAN_BUDGET_MS = 45_000;
+export const maxDuration = 300;
+const SCAN_BUDGET_MS = 120_000;
+// A 14k-row 飞书 sheet takes about 40s, so one is only started with room to finish.
+const SHEET_BUDGET_MS = 230_000;
+const SHEET_TIME_MS = 60_000;
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -54,5 +58,14 @@ export async function GET(request: Request) {
     scanned++;
   }
 
-  return NextResponse.json({ usersChecked: users.length, emailsSent: sent, inboxesScanned: scanned, inboxesPending: scanners.length - scanned });
+  // Subscribed 校招信息表: the desktop app re-reads them hourly, here once a day.
+  const subscribers = await db.postingSource.findMany({ distinct: ["userId"], select: { userId: true } });
+  let sheets = 0;
+  for (const { userId } of subscribers) {
+    if (Date.now() - started > SHEET_BUDGET_MS - SHEET_TIME_MS) break;
+    await checkPostingSources(userId).catch((error) => console.error("[cron] sheet sync failed", error));
+    sheets++;
+  }
+
+  return NextResponse.json({ usersChecked: users.length, emailsSent: sent, inboxesScanned: scanned, inboxesPending: scanners.length - scanned, sheetUsersSynced: sheets, sheetUsersPending: subscribers.length - sheets });
 }

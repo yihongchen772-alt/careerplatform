@@ -637,7 +637,7 @@ export function TailorWorkbench({
             <DialogDescription>
               {savedVersion && !asNew
                 ? `会用现在的内容重新生成「${savedVersion.name}」的 PDF。`
-                : "生成一份 PDF 放进「简历版本」，网申浏览器一键填写时可以直接选它上传。"}
+                : "生成一份 PDF 放进「简历版本」，用浏览器插件一键填写时可以直接选它上传。"}
             </DialogDescription>
           </DialogHeader>
           <Input value={versionName} onChange={(e) => setVersionName(e.target.value)} maxLength={60} aria-label="简历版本名称" />

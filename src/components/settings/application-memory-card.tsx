@@ -81,7 +81,7 @@ export function ApplicationMemoryCard({ initial }: { initial: MemoryView[] }) {
         }}>{label} {rows.filter((row) => value === "all" || row.category === value).length}</Button>)}
       </div>
       <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目、公司或奖项" aria-label="搜索经历记忆" />
-      {!rows.length ? <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">还没有确认加入的经历。网申浏览器发现完整经历后会放入「待核对变化」；只有你确认加入，才会出现在这里并可用于以后填写。</p> : <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+      {!rows.length ? <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">还没有确认加入的经历。浏览器插件发现完整经历后会放入「待核对变化」；只有你确认加入，才会出现在这里并可用于以后填写。</p> : <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <div className="space-y-3">
           <div className="max-h-[32rem] space-y-2 overflow-y-auto">
             {filtered.map((row) => <div key={row.id} className={cn("flex items-start gap-2 rounded-xl border p-3", selectedId === row.id && "border-primary/50 bg-primary/5")}>
