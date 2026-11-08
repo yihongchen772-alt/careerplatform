@@ -16,7 +16,6 @@ const RENDER_TIMEOUT_MS = 20000;
 // SPA content often keeps populating after load; same settle as the desktop bridge.
 const SETTLE_MS = 3000;
 
-let browser: Promise<Browser> | null = null;
 
 async function ensureCjkFont(dir: string) {
   const file = path.join(dir, "NotoSansSC-Regular.otf");
@@ -38,19 +37,18 @@ async function launch(): Promise<Browser> {
   return puppeteer.launch({ executablePath, args: chromium.args, headless: true });
 }
 
-/** One browser per warm instance; each call gets its own incognito context. */
+/**
+ * A browser of its own for each call, closed afterwards. The serverless build
+ * runs Chromium with --single-process, where opening an incognito context
+ * crashes the browser, so isolation between calls comes from not sharing one.
+ */
 async function withPage<T>(run: (page: Page) => Promise<T>): Promise<T> {
-  browser ??= launch().catch((error) => { browser = null; throw error; });
-  let instance = await browser;
-  if (!instance.connected) {
-    browser = launch();
-    instance = await browser;
-  }
-  const context = await instance.createBrowserContext();
+  const browser = await launch();
   try {
-    return await run(await context.newPage());
+    const [first] = await browser.pages();
+    return await run(first ?? (await browser.newPage()));
   } finally {
-    await context.close().catch(() => {});
+    await browser.close().catch(() => {});
   }
 }
 
